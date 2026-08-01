@@ -100,29 +100,35 @@ from the env seed.
 
 ## S2. Reward & Economics
 
-### S2.1 Reward v1 — parity mode
+**Ratified (ADR-0001): the revenue-per-byte concept is eliminated.** There is
+no synthetic revenue term anywhere in the system. The objective is
+**cost-minimal SLO compliance**: run the network as cheaply as possible while
+meeting service-level objectives. This is what an operator actually optimizes,
+and it removes an invented constant from every result.
 
-Reproduces the current live-env formula (revenue-per-byte × served throughput
-− infra cost per step) so simulator results are comparable to the original
-design. Constants sourced from the existing code, surfaced into config.
+### S2.1 Reward definition
 
-### S2.2 Reward v2 — SLO-based (the real objective)
-
-Reward = `revenue − infra_cost − slo_penalty`, where:
+Reward per step = `−(infra_cost + slo_penalty)`, where:
 
 * **SLO definition (sim)**: a step is in violation when
   `served / offered < slo_target` (default 0.995). Violation minutes
   accumulate.
-* **Penalty structure**: per-violation-minute penalty (default: 20× the
-  per-minute revenue at base load — an SLA-credit-like structure where
-  breaching costs far more than serving). Configurable.
-* **[DECISION] SLO thresholds and penalty magnitudes** are domain calls —
-  defaults above are placeholders for the owner to ratify or replace.
+* **Penalty structure**: per-violation-minute penalty in dollars (default:
+  `slo_penalty_rate` = 20× the hourly cost of the Large instance, prorated
+  per minute — an SLA-credit-like structure where breaching is always far
+  more expensive than provisioning). Configurable.
+* **[DECISION D5] SLO threshold and penalty magnitude** — defaults above are
+  ratified as working values; revisable by the domain owner via ADR as real
+  SLA structures become available.
 * **Live-env mapping (Phase 2, spec'd now so the sim reward is forward
   compatible)**: served/offered proxy from UPF throughput vs. UE-side offered
   load; extension points reserved for AMF registration success rate and
   session-establishment latency once exporters for open5gs metrics are in
   the local stack (S9).
+
+Note the reward is always ≤ 0; policies are compared on total operating cost
+(S4), where lower is better. The NOOP-on-Small baseline remains meaningful:
+minimal infra cost, heavy penalties at peak load.
 
 ### S2.3 Cost model
 
@@ -166,7 +172,8 @@ known-correct decisions.
 
 ### S4.1 Metrics (per episode)
 
-* Cumulative profit ($) — headline.
+* Total operating cost ($ = infra cost + SLO penalties) — headline, lower is
+  better.
 * SLO violation minutes and violation fraction.
 * Action churn (count of non-NOOP actions).
 * Regret vs. oracle ($ and %).
@@ -191,7 +198,7 @@ known-correct decisions.
 ### S4.4 Acceptance criterion for the whole project (the honest bar)
 
 The learned agent is declared useful **only if** it beats B1 *and* B3 on
-cumulative profit with non-overlapping confidence intervals on the
+total operating cost with non-overlapping confidence intervals on the
 `diurnal+bursty` scenario. If B3 wins, that result is reported with equal
 prominence — a negative finding is a valid outcome of this work.
 
@@ -205,8 +212,10 @@ prominence — a negative finding is a valid outcome of this work.
   preferred over ergonomics.
 * **[DECISION] Algorithm** — recommended: **DQN** as the ported agent
   (discrete 3-action space is DQN's home turf; SAC's continuous-control
-  strengths are irrelevant here). The SAC/RLlib and DQN/tf-agents code paths
-  are archived, not deleted (S7).
+  strengths are irrelevant here). Note: DQN's discreteness constraint applies
+  to the *action* space only — continuous observations are exactly what the
+  Q-network's function approximation handles (see ADR-0001). The SAC/RLlib
+  and DQN/tf-agents code paths are archived, not deleted (S7).
 * Network: MLP, 2 × 64 hidden units (config-exposed). Observation flattened.
 * Training budget: 500k sim steps default; checkpoint every 50k; final +
   best-eval checkpoints saved in SB3 `.zip` format with the `SimConfig`
@@ -311,19 +320,19 @@ trains for). Assumes Linux or WSL2, Docker, 16 GB RAM minimum.
 
 ## S10. Decision Register
 
-Consolidated list of the **[DECISION]** items. Defaults apply unless
-overridden; none block the start of work.
+All decisions below were **ratified by the owner on 2026-08-01** and recorded
+in ADR-0001. They are closed; changing one requires a superseding ADR.
 
-| # | Decision | Recommended default | Needs |
-|---|---|---|---|
-| D1 | RL library | Stable-Baselines3 | sign-off |
-| D2 | Ported algorithm | DQN (archive SAC + BBO) | sign-off |
-| D3 | Python floor | 3.11 | sign-off |
-| D4 | Trace file format | Parquet (CSV import) | sign-off |
-| D5 | SLO target + penalty constants | 0.995 / 20× per-minute revenue | **domain owner input** |
-| D6 | Revenue-per-byte (v1 parity constant) | carry existing value into config | domain owner input |
-| D7 | Instance capacity calibration (sim) | Large = 1.2× peak diurnal, Small = 0.4× | domain owner input |
-| D8 | Archive vs. delete legacy agents | archive (excluded from packaging/CI) | sign-off |
+| # | Decision | Ratified value |
+|---|---|---|
+| D1 | RL library | Stable-Baselines3 |
+| D2 | Ported algorithm | DQN (archive SAC + BBO) |
+| D3 | Python floor | 3.11 |
+| D4 | Trace file format | Parquet (CSV import) |
+| D5 | SLO target + penalty constants | 0.995 / 20× Large-instance hourly cost, per violation-minute (working values; owner may revise via ADR) |
+| D6 | Revenue-per-byte | **Eliminated entirely.** Objective is cost-minimal SLO compliance (S2). |
+| D7 | Instance capacity calibration (sim) | Large = 1.2× peak diurnal, Small = 0.4× (working values) |
+| D8 | Legacy agents | Archived in `archive/`, excluded from packaging and CI |
 
 ## S11. Non-Goals (this sprint)
 
