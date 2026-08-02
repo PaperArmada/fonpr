@@ -15,8 +15,13 @@ when scheduled.
   once the V0 agent is re-expressed as a Policy over the live env.
 - S5 multi-seed training campaign (5 seeds) to upgrade the 2026-08-02
   preliminary benchmark to a citable result.
-- Investigate the DQN "always-large" local optimum: the observation window
-  (one step) carries no time-of-day signal; candidate fixes are a longer
-  window or a time-of-day feature — either is an S1 spec amendment first.
+- DQN training reliability study (campaign 2026-08-02 found 2/5 to 4/5 seed
+  failure): exploration schedule, learning rate, target-update interval;
+  then PPO as candidate replacement (requires ADR superseding ADR-0001/D2).
+- Milan (Telecom Italia Big Data Challenge) trace converter:
+  `fonpr trace convert-milan` — aggregate cell clusters (business,
+  residential, citywide, event-day), interpolate 10-min source to tick
+  granularity, scale peak to capacity calibration, emit trace-schema
+  Parquet with train/eval week split; ODbL attribution note.
 - S9 local stack (`make local-stack`): needs a Docker-capable machine;
   build and verify there rather than committing an untested Makefile.
