@@ -61,6 +61,30 @@ def main(argv: list[str] | None = None) -> int:
     pull_parser.add_argument("--endpoint", required=True, help="Prometheus ip:port.")
     pull_parser.add_argument("--hours", type=float, default=24.0, help="Lookback window.")
     pull_parser.add_argument("--out", default="trace.parquet", help="Output file path.")
+    milan_parser = trace_sub.add_parser(
+        "convert-milan",
+        help="Convert Telecom Italia Milan dataset files to the trace schema.",
+    )
+    milan_parser.add_argument("inputs", nargs="+", help="Milan telecom TSV file path(s).")
+    milan_parser.add_argument("--out", default="milan.parquet", help="Output trace path.")
+    milan_parser.add_argument(
+        "--squares", default=None, help="Comma-separated square ids to aggregate."
+    )
+    milan_parser.add_argument(
+        "--top", type=int, default=None, help="Aggregate the N busiest squares."
+    )
+    milan_parser.add_argument(
+        "--peak-bytes-per-sec",
+        type=float,
+        default=2.0e7,
+        help="Scale the series so its peak equals this load (default matches D7 calibration).",
+    )
+    milan_parser.add_argument(
+        "--split-eval-days",
+        type=int,
+        default=0,
+        help="Write separate -train/-eval files, holding out the last N days.",
+    )
 
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -89,11 +113,30 @@ def main(argv: list[str] | None = None) -> int:
             algorithm=args.algo,
         )
     if args.command == "trace":
-        from fonpr.sim.trace import pull_trace
+        if args.trace_command == "pull":
+            from fonpr.sim.trace import pull_trace
 
-        out = pull_trace(endpoint=args.endpoint, hours=args.hours, out_path=args.out)
-        logger.info("trace written to %s", out)
-        return 0
+            out = pull_trace(endpoint=args.endpoint, hours=args.hours, out_path=args.out)
+            logger.info("trace written to %s", out)
+            return 0
+        if args.trace_command == "convert-milan":
+            from pathlib import Path
+
+            from fonpr.sim.milan import convert_milan
+
+            squares = (
+                [int(s) for s in args.squares.split(",")] if args.squares else None
+            )
+            outputs = convert_milan(
+                input_paths=[Path(p) for p in args.inputs],
+                out_path=Path(args.out),
+                squares=squares,
+                top=args.top,
+                peak_bytes_per_sec=args.peak_bytes_per_sec,
+                split_eval_days=args.split_eval_days,
+            )
+            logger.info("trace(s) written: %s", [str(p) for p in outputs])
+            return 0
     parser.error(f"unknown command {args.command!r}")
     return 2
 
