@@ -1,0 +1,11 @@
+git_sha: b0e17fe0fd312d6497c2b7023db2ebf6192e9727
+generated_utc: 20260802-023211
+eval_config:
+  scenarios:
+  - steady
+  - diurnal
+  - diurnal_bursty
+  - drift
+  n_seeds: 20
+  seed_offset: 10000
+  episode_days: 7.0

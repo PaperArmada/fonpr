@@ -13,3 +13,10 @@ when scheduled.
   per S8; drop the `nose` dependency.
 - Collapse `Dockerfile_V0`/`requirements_v0.txt` into the single-image build
   once the V0 agent is re-expressed as a Policy over the live env.
+- S5 multi-seed training campaign (5 seeds) to upgrade the 2026-08-02
+  preliminary benchmark to a citable result.
+- Investigate the DQN "always-large" local optimum: the observation window
+  (one step) carries no time-of-day signal; candidate fixes are a longer
+  window or a time-of-day feature — either is an S1 spec amendment first.
+- S9 local stack (`make local-stack`): needs a Docker-capable machine;
+  build and verify there rather than committing an untested Makefile.
