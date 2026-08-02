@@ -30,8 +30,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     eval_parser.add_argument(
         "--dqn-checkpoint",
+        action="append",
         default=None,
-        help="Path to a trained DQN checkpoint to include as the 'dqn' policy.",
+        metavar="[LABEL=]PATH",
+        help="Trained DQN checkpoint to include (repeatable). Optional LABEL= "
+        "prefix names the policy row; default label is 'dqn'.",
+    )
+    eval_parser.add_argument(
+        "--time-features",
+        action="store_true",
+        help="Evaluate on the enriched sin/cos time-of-day observation (ADR-0002).",
     )
 
     train_parser = subparsers.add_parser(
@@ -65,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             out_root=args.out,
             quick=args.quick,
             dqn_checkpoint=args.dqn_checkpoint,
+            time_features=args.time_features,
         )
     if args.command == "train":
         from fonpr.train import run_train_cli

@@ -10,3 +10,4 @@ New ADRs: copy `0000-template.md` to the next number, keep it under a page.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-foundation-decisions.md) | Foundation decisions for the modernization effort | Accepted |
+| [0002](0002-time-of-day-observation.md) | Optional time-of-day observation features | Accepted |

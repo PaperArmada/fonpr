@@ -23,6 +23,8 @@ class TimeConfig:
     window_minutes: int = 15
     sample_rate_per_minute: int = 1
     episode_days: float = 7.0
+    # ADR-0002: opt-in sin/cos time-of-day observation columns (3-4).
+    include_time_features: bool = False
 
     def __post_init__(self) -> None:
         if self.step_minutes <= 0 or self.window_minutes <= 0:

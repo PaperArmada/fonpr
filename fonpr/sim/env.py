@@ -37,8 +37,11 @@ class FONPRSimEnv(gym.Env):
         super().__init__()
         self.config = config or SimConfig()
         samples = self.config.time.window_ticks
+        n_cols = 5 if self.config.time.include_time_features else 3
+        # sin/cos columns span [-1, 1]; the base columns are non-negative.
+        low = -1.0 if self.config.time.include_time_features else 0.0
         self.observation_space = spaces.Box(
-            low=0.0, high=np.inf, shape=(samples, 3), dtype=np.float32
+            low=low, high=np.inf, shape=(samples, n_cols), dtype=np.float32
         )
         self.action_space = spaces.Discrete(3)
         self._traffic: TrafficModel | None = None
@@ -60,11 +63,14 @@ class FONPRSimEnv(gym.Env):
 
         # Warm-up: fill the observation window before the episode starts.
         # Pre-episode cost and violations are not scored.
+        self._ticks_elapsed = 0
         offered = self._traffic.advance(cfg.time.window_ticks)
         result = self._plant.advance(offered)
         self._throughput_hist = result.served.copy()
         self._large_hist = result.large_on.copy()
         self._small_hist = result.small_on.copy()
+        if cfg.time.include_time_features:
+            self._sin_hist, self._cos_hist = self._time_features(cfg.time.window_ticks)
 
         return (
             self._observation(),
@@ -100,6 +106,10 @@ class FONPRSimEnv(gym.Env):
         self._throughput_hist = np.concatenate([self._throughput_hist, result.served])[-window:]
         self._large_hist = np.concatenate([self._large_hist, result.large_on])[-window:]
         self._small_hist = np.concatenate([self._small_hist, result.small_on])[-window:]
+        if cfg.time.include_time_features:
+            sin_new, cos_new = self._time_features(len(offered))
+            self._sin_hist = np.concatenate([self._sin_hist, sin_new])[-window:]
+            self._cos_hist = np.concatenate([self._cos_hist, cos_new])[-window:]
 
         self._step_count += 1
         truncated = self._step_count >= cfg.time.episode_steps
@@ -118,10 +128,19 @@ class FONPRSimEnv(gym.Env):
             ),
         )
 
+    def _time_features(self, n_ticks: int) -> tuple[np.ndarray, np.ndarray]:
+        """sin/cos of time-of-day for the next n_ticks; advances the tick clock."""
+        ticks = self._ticks_elapsed + np.arange(n_ticks)
+        self._ticks_elapsed += n_ticks
+        day_fraction = (ticks * self.config.time.tick_minutes % 1440.0) / 1440.0
+        angle = 2.0 * np.pi * day_fraction
+        return np.sin(angle), np.cos(angle)
+
     def _observation(self) -> np.ndarray:
-        return np.stack(
-            [self._throughput_hist, self._large_hist, self._small_hist], axis=1
-        ).astype(np.float32)
+        columns = [self._throughput_hist, self._large_hist, self._small_hist]
+        if self.config.time.include_time_features:
+            columns += [self._sin_hist, self._cos_hist]
+        return np.stack(columns, axis=1).astype(np.float32)
 
     def _info(
         self,

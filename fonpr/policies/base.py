@@ -11,10 +11,14 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-# Observation column indices (see FONPRSimEnv docstring).
+# Observation column indices (see FONPRSimEnv docstring). Columns 3-4 are
+# the optional sin/cos time-of-day features (ADR-0002); they are appended,
+# so the base indices hold in both variants.
 COL_THROUGHPUT = 0
 COL_LARGE_ON = 1
 COL_SMALL_ON = 2
+COL_SIN_TOD = 3
+COL_COS_TOD = 4
 
 
 class Policy(ABC):

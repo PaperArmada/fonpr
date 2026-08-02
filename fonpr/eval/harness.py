@@ -35,6 +35,9 @@ class EvalConfig:
     n_seeds: int = 20
     seed_offset: int = 10_000  # eval seeds disjoint from training seeds by construction
     episode_days: float = 7.0
+    # ADR-0002: evaluate on the enriched observation. Traffic, plant, and
+    # seeds are unaffected, so costs stay comparable across variants.
+    include_time_features: bool = False
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> EvalConfig:
@@ -49,9 +52,11 @@ class EvalConfig:
         return cls(**raw)
 
 
-def scenario_config(name: str, episode_days: float) -> SimConfig:
+def scenario_config(
+    name: str, episode_days: float, include_time_features: bool = False
+) -> SimConfig:
     """Named traffic scenarios (S4.2) over the default plant/econ."""
-    time = TimeConfig(episode_days=episode_days)
+    time = TimeConfig(episode_days=episode_days, include_time_features=include_time_features)
     if name == "steady":
         traffic = TrafficConfig(diurnal_amplitude=0.0, burst_rate_per_day=0.0)
     elif name == "diurnal":
@@ -133,7 +138,9 @@ def evaluate(
     timelines: dict[str, dict[str, dict[str, np.ndarray]]] = {}
 
     for scenario in eval_cfg.scenarios:
-        sim_cfg = scenario_config(scenario, eval_cfg.episode_days)
+        sim_cfg = scenario_config(
+            scenario, eval_cfg.episode_days, eval_cfg.include_time_features
+        )
         env = FONPRSimEnv(sim_cfg)
         timelines[scenario] = {}
 
@@ -199,7 +206,8 @@ def run_eval_cli(
     config_path: str | None,
     out_root: str,
     quick: bool = False,
-    dqn_checkpoint: str | None = None,
+    dqn_checkpoint: list[str] | None = None,
+    time_features: bool = False,
 ) -> int:
     """Entry point behind ``fonpr eval`` (S4.3)."""
     from fonpr.eval.report import write_report
@@ -208,16 +216,27 @@ def run_eval_cli(
         eval_cfg = EvalConfig.from_yaml(config_path)
     elif quick:
         eval_cfg = EvalConfig(
-            scenarios=("steady", HEADLINE_SCENARIO), n_seeds=3, episode_days=2.0
+            scenarios=("steady", HEADLINE_SCENARIO),
+            n_seeds=3,
+            episode_days=2.0,
+            include_time_features=time_features,
         )
     else:
-        eval_cfg = EvalConfig()
+        eval_cfg = EvalConfig(include_time_features=time_features)
 
     extra_policies = None
     if dqn_checkpoint:
         from fonpr.train import DQNPolicy
 
-        extra_policies = {"dqn": lambda _cfg: DQNPolicy(dqn_checkpoint)}
+        extra_policies = {}
+        for spec in dqn_checkpoint:
+            label, _, path = spec.rpartition("=")
+            label = label or "dqn"
+            if label in extra_policies:
+                raise ValueError(f"duplicate policy label {label!r}")
+            extra_policies[label] = (
+                lambda _cfg, p=path: DQNPolicy(p)  # bind path per iteration
+            )
 
     results, timelines = evaluate(eval_cfg, extra_policies=extra_policies)
     out_dir = write_report(results, timelines, eval_cfg, Path(out_root))
