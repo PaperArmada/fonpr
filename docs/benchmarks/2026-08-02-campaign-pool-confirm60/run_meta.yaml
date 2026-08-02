@@ -1,0 +1,11 @@
+git_sha: 3a87d1f10b4120f2f09cf9b7204138758c42eef0
+generated_utc: 20260802-113355
+eval_config:
+  scenarios:
+  - diurnal_bursty
+  n_seeds: 60
+  seed_offset: 10000
+  episode_days: 7.0
+  include_time_features: false
+  energy: false
+  pool: true

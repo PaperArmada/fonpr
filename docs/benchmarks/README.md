@@ -172,6 +172,19 @@ threshold 20.35 < every PPO seed 21.36-22.06.
    CIs the bar is not yet formally met; under the paired analysis it is.
    Whether S4.4 should name the paired test (statistically correct for
    a shared-seed protocol) is an owner decision, not an in-session one.
+
+   **Confirmatory run at N=60** (`2026-08-02-campaign-pool-confirm60/`;
+   same protocol, seed offset, and scenario — a superset of the 20):
+   every plain PPO seed separates from BOTH baselines with
+   non-overlapping unpaired 95% CIs (worst PPO upper 35.19 vs forecast
+   lower 37.13 and threshold lower 41.40; oracle 17.36). Under the
+   strictest reading of S4.4 — unpaired intervals, all five training
+   seeds individually — the learner beats B1 and B3 on diurnal_bursty.
+   The N=20 marginal overlap was between-seed traffic variance, exactly
+   as the paired analysis said. Formalizing a confirmatory-N rule in
+   S4.2 (default N=20; marginal-overlap verdicts resolved by a
+   pre-registered higher-N run, never a lower one) awaits owner
+   sign-off.
 3. **The clean-diurnal cyclic harvest is STILL unclaimed.** On pure
    diurnal traffic every learner parks near 3 nodes (~3 actions,
    regret ~$6.07/week) instead of tracking the cycle; time features
