@@ -18,6 +18,7 @@ import numpy as np
 from gymnasium import spaces
 
 from fonpr.sim.config import SimConfig
+from fonpr.sim.costing import series_cost_and_energy
 from fonpr.sim.plant import PlantModel
 from fonpr.sim.traffic import TrafficModel
 
@@ -74,7 +75,15 @@ class FONPRSimEnv(gym.Env):
 
         return (
             self._observation(),
-            self._info(offered, result, violation_minutes=0.0, penalty_usd=0.0, applied=False),
+            self._info(
+                offered,
+                result,
+                violation_minutes=0.0,
+                penalty_usd=0.0,
+                applied=False,
+                infra_cost_usd=result.infra_cost_usd,
+                energy_wh=0.0,
+            ),
         )
 
     def step(
@@ -100,7 +109,17 @@ class FONPRSimEnv(gym.Env):
         violation_ticks = int(np.sum(ratio < cfg.econ.slo_target))
         violation_minutes = violation_ticks * cfg.time.tick_minutes
         penalty = violation_minutes * cfg.econ.penalty_per_violation_minute_usd
-        reward = -(result.infra_cost_usd + penalty)
+        infra_cost, energy_wh = series_cost_and_energy(
+            cfg.econ,
+            cfg.plant,
+            cfg.time.tick_minutes,
+            result.served,
+            result.large_on,
+            result.small_on,
+            result.serving_large,
+            result.infra_cost_usd,
+        )
+        reward = -(infra_cost + penalty)
 
         window = cfg.time.window_ticks
         self._throughput_hist = np.concatenate([self._throughput_hist, result.served])[-window:]
@@ -125,6 +144,8 @@ class FONPRSimEnv(gym.Env):
                 violation_minutes=violation_minutes,
                 penalty_usd=penalty,
                 applied=applied,
+                infra_cost_usd=infra_cost,
+                energy_wh=energy_wh,
             ),
         )
 
@@ -150,6 +171,8 @@ class FONPRSimEnv(gym.Env):
         violation_minutes: float,
         penalty_usd: float,
         applied: bool,
+        infra_cost_usd: float,
+        energy_wh: float,
     ) -> dict[str, Any]:
         return {
             "offered_load": float(offered.mean()),
@@ -157,8 +180,9 @@ class FONPRSimEnv(gym.Env):
             "slo_violation": float(violation_minutes),
             "instance_type": self._plant.active_instance_type,
             "in_transition": self._plant.in_transition,
-            "step_cost_usd": float(result.infra_cost_usd),
+            "step_cost_usd": float(infra_cost_usd),
             "step_penalty_usd": float(penalty_usd),
+            "step_energy_wh": float(energy_wh),
             "offered_series": offered,
             "served_series": result.served,
             "capacity_series": result.capacity,

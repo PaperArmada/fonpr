@@ -86,7 +86,7 @@ def run_episode(
     """Roll one full episode; return (metrics, offered_steps, series)."""
     policy.reset()
     obs, _ = env.reset(seed=seed)
-    infra = penalty = violation_minutes = 0.0
+    infra = penalty = violation_minutes = energy_wh = 0.0
     churn = 0
     offered_sum = served_sum = 0.0
     offered_steps: list[np.ndarray] = []
@@ -98,6 +98,7 @@ def run_episode(
         obs, _, _, truncated, info = env.step(action)
         infra += info["step_cost_usd"]
         penalty += info["step_penalty_usd"]
+        energy_wh += info["step_energy_wh"]
         violation_minutes += info["slo_violation"]
         churn += int(info["action_applied"])
         offered_sum += float(np.sum(info["offered_series"]))
@@ -117,6 +118,7 @@ def run_episode(
         "violation_fraction": violation_minutes / episode_minutes,
         "action_churn": float(churn),
         "served_offered_ratio": served_sum / offered_sum if offered_sum else 1.0,
+        "energy_kwh": energy_wh / 1000.0,  # 0.0 under the price model (S13)
     }
     kept = (
         {name: np.concatenate(chunks) for name, chunks in series.items()}

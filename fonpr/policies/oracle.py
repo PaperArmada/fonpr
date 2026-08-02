@@ -22,32 +22,51 @@ def _step_cost(
 
     ``target`` == ``state`` models NOOP; otherwise a transition starts at the
     step boundary (lag < step length, so it always completes in-step —
-    matching the plant model).
+    matching the plant model). Costing goes through the shared
+    series_cost_and_energy so regret stays exact under either cost model.
     """
+    from fonpr.sim.costing import series_cost_and_energy
+
     plant, econ, time_cfg = config.plant, config.econ, config.time
     tick_hours = time_cfg.tick_minutes / 60.0
     n = len(offered)
     capacity = np.empty(n)
+    large_on = np.zeros(n)
+    small_on = np.zeros(n)
+    serving_large = np.zeros(n)
+
+    def type_of(s: str) -> str:
+        return plant.large_instance_type if s == "large" else plant.small_instance_type
+
+    def hourly(instance_type: str) -> float:
+        # Price bookkeeping is unused (and its table optional) under the
+        # energy model — series_cost_and_energy recomputes from watts.
+        return 0.0 if econ.power is not None else econ.hourly_cost(instance_type)
 
     if target == state:
         capacity[:] = plant.capacity(state)
-        infra = econ.hourly_cost(
-            plant.large_instance_type if state == "large" else plant.small_instance_type
-        ) * tick_hours * n
+        (large_on if state == "large" else small_on)[:] = 1.0
+        serving_large[:] = 1.0 if state == "large" else 0.0
+        price_cost = hourly(type_of(state)) * tick_hours * n
     else:
         lag = min(round(plant.transition_lag_minutes / time_cfg.tick_minutes), n)
         capacity[:lag] = plant.small_capacity_bytes_per_sec
         capacity[lag:] = plant.capacity(target)
-        both = (
-            econ.hourly_cost(plant.large_instance_type)
-            + econ.hourly_cost(plant.small_instance_type)
+        large_on[:lag] = 1.0
+        small_on[:lag] = 1.0
+        serving_large[:lag] = 1.0 if state == "large" else 0.0
+        (large_on if target == "large" else small_on)[lag:] = 1.0
+        serving_large[lag:] = 1.0 if target == "large" else 0.0
+        both = hourly(plant.large_instance_type) + hourly(plant.small_instance_type)
+        price_cost = both * tick_hours * lag + hourly(type_of(target)) * (
+            tick_hours * (n - lag)
         )
-        after = econ.hourly_cost(
-            plant.large_instance_type if target == "large" else plant.small_instance_type
-        )
-        infra = both * tick_hours * lag + after * tick_hours * (n - lag)
 
     served = np.minimum(offered, capacity)
+    infra, _ = series_cost_and_energy(
+        econ, plant, time_cfg.tick_minutes, served, large_on, small_on,
+        serving_large, price_cost,
+    )
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(offered > 0, served / offered, 1.0)
     violation_minutes = float(np.sum(ratio < econ.slo_target)) * time_cfg.tick_minutes

@@ -1,0 +1,13 @@
+# Energy-variant sim config (S13): identical objective — cost-minimal SLO
+# compliance — with infrastructure cost derived from power draw instead of
+# a cloud price table. Watts values are working placeholders; calibrate
+# them against real hardware (smart-plug measurement on the lab rig).
+econ:
+  power:
+    idle_watts:
+      m4.xlarge: 120.0
+      t3.medium: 60.0
+    max_watts:
+      m4.xlarge: 280.0
+      t3.medium: 120.0
+    electricity_usd_per_kwh: 0.12

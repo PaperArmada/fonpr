@@ -116,14 +116,58 @@ class PlantConfig:
 
 
 @dataclass(frozen=True)
+class PowerConfig:
+    """Energy variant (S13): infra cost derived from measured power draw.
+
+    Load-proportional server model: watts = idle + (max - idle) x utilization.
+    Working default values are placeholders until measured on real hardware
+    (a smart plug on the home rig calibrates them empirically).
+    """
+
+    idle_watts: dict[str, float] = field(
+        default_factory=lambda: {"m4.xlarge": 120.0, "t3.medium": 60.0}
+    )
+    max_watts: dict[str, float] = field(
+        default_factory=lambda: {"m4.xlarge": 280.0, "t3.medium": 120.0}
+    )
+    electricity_usd_per_kwh: float = 0.12
+
+    def __post_init__(self) -> None:
+        if self.electricity_usd_per_kwh <= 0:
+            raise ValueError("electricity_usd_per_kwh must be positive")
+        if set(self.idle_watts) != set(self.max_watts):
+            raise ValueError("idle_watts and max_watts must cover the same instance types")
+        for instance_type, idle in self.idle_watts.items():
+            if not 0 <= idle <= self.max_watts[instance_type]:
+                raise ValueError(f"{instance_type}: need 0 <= idle_watts <= max_watts")
+
+    def watts(self, instance_type: str, utilization: float) -> float:
+        idle = self.idle_watts[instance_type]
+        return idle + (self.max_watts[instance_type] - idle) * utilization
+
+    @property
+    def max_hourly_cost_usd(self) -> float:
+        """Cost of the hungriest tier at full load — anchors the SLO penalty."""
+        return max(self.max_watts.values()) * self.electricity_usd_per_kwh / 1000.0
+
+
+@dataclass(frozen=True)
 class EconConfig:
-    """Cost and SLO-penalty model (S2). All values in USD."""
+    """Cost and SLO-penalty model (S2, S13). All values in USD.
+
+    With ``power`` unset, infra cost comes from the hourly pricing table
+    (cloud-instance variant). With ``power`` set, infra cost is derived from
+    watts x electricity price (energy variant, S13); the pricing table is
+    then unused. The objective is identical either way: cost-minimal SLO
+    compliance.
+    """
 
     hourly_cost_usd: dict[str, float] = field(
         default_factory=lambda: {"m4.xlarge": 0.20, "t3.medium": 0.0416}
     )
     slo_target: float = 0.995  # ADR-0001/D5
     slo_penalty_multiplier: float = 20.0  # x most-expensive hourly cost, per violation-minute
+    power: PowerConfig | None = None
 
     def __post_init__(self) -> None:
         if not 0 < self.slo_target <= 1:
@@ -138,7 +182,12 @@ class EconConfig:
 
     @property
     def penalty_per_violation_minute_usd(self) -> float:
-        return self.slo_penalty_multiplier * max(self.hourly_cost_usd.values()) / 60.0
+        anchor = (
+            self.power.max_hourly_cost_usd
+            if self.power is not None
+            else max(self.hourly_cost_usd.values())
+        )
+        return self.slo_penalty_multiplier * anchor / 60.0
 
 
 @dataclass(frozen=True)
@@ -152,7 +201,11 @@ class SimConfig:
 
     def __post_init__(self) -> None:
         for instance_type in (self.plant.large_instance_type, self.plant.small_instance_type):
-            self.econ.hourly_cost(instance_type)  # fail fast on missing pricing
+            if self.econ.power is not None:
+                if instance_type not in self.econ.power.idle_watts:
+                    raise KeyError(f"instance type {instance_type!r} not in power model")
+            else:
+                self.econ.hourly_cost(instance_type)  # fail fast on missing pricing
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SimConfig:
@@ -187,6 +240,9 @@ def _dataclass_from_dict(cls: type, raw: dict[str, Any], path: str) -> Any:
             isinstance(f.type, str) and f.type in _NESTED_TYPES
         ):
             nested_cls = _NESTED_TYPES[f.type] if isinstance(f.type, str) else f.type
+            if value is None:  # optional nested section (e.g. econ.power)
+                kwargs[name] = None
+                continue
             if not isinstance(value, dict):
                 raise TypeError(f"{path}.{name}: expected a mapping")
             kwargs[name] = _dataclass_from_dict(nested_cls, value, path=f"{path}.{name}")
@@ -196,9 +252,12 @@ def _dataclass_from_dict(cls: type, raw: dict[str, Any], path: str) -> Any:
 
 
 # `from __future__ import annotations` stringifies field types; map them back.
+# Optional nested dataclasses appear with their union suffix.
 _NESTED_TYPES: dict[str, type] = {
     "TimeConfig": TimeConfig,
     "TrafficConfig": TrafficConfig,
     "PlantConfig": PlantConfig,
     "EconConfig": EconConfig,
+    "PowerConfig": PowerConfig,
+    "PowerConfig | None": PowerConfig,
 }

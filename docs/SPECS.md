@@ -26,7 +26,7 @@ deployed against the live advisor/actuator loop without modification.
 | API | Gymnasium `Env` (`reset(seed, options)`, `step(action)` returning `(obs, reward, terminated, truncated, info)`) |
 | Observation space | `Box(shape=(samples, 3), dtype=float32)` — throughput (bytes/s), large-instance-on flag, small-instance-on flag. Identical to live env. With `time.include_time_features` (ADR-0002, default off): shape `(samples, 5)`, appending per-tick `sin/cos` of time-of-day as columns 3–4. |
 | Action space | `Discrete(3)`: 0 = NOOP, 1 = transition to Large, 2 = transition to Small. Identical to live env. |
-| `info` dict keys | `offered_load`, `served_load`, `slo_violation` (violation minutes), `instance_type`, `in_transition`, `step_cost_usd`, `step_penalty_usd`, `offered_series`, `served_series`, `capacity_series` (per-tick arrays, consumed by the oracle and plots), `action_applied` — required, stable names. (`step_revenue_usd` was removed with the revenue term, ADR-0001/D6.) |
+| `info` dict keys | `offered_load`, `served_load`, `slo_violation` (violation minutes), `instance_type`, `in_transition`, `step_cost_usd`, `step_penalty_usd`, `step_energy_wh` (S13; 0.0 under the price model), `offered_series`, `served_series`, `capacity_series` (per-tick arrays, consumed by the oracle and plots), `action_applied` — required, stable names. (`step_revenue_usd` was removed with the revenue term, ADR-0001/D6.) |
 | Determinism | Same seed + same config ⇒ bit-identical trajectories. Enforced by test. |
 
 ### S1.2 Traffic model (offered load)
@@ -368,3 +368,33 @@ unchanged, because the observation contract is S1.1's exactly.
 * **Verification**: correctness against a real cluster is gated by S9's
   `make verify` (this environment cannot host one); the advisor and loop
   are contract-tested against recorded fixtures per S8.
+
+## S13. Energy Variant (the application bet)
+
+The identical control problem with infrastructure cost derived from
+**measured power** instead of a cloud price table. The objective invariant
+(cost-minimal SLO compliance, CLAUDE.md / ADR-0001/D6) is untouched: only
+the derivation of `infra_cost` changes, so every policy, the oracle, and
+the eval harness work unmodified.
+
+* **PowerConfig** (optional `econ.power` section; template
+  `configs/sim-energy.yaml`): per-instance-type `idle_watts` / `max_watts`
+  and `electricity_usd_per_kwh`. Load-proportional server model:
+  `watts = idle + (max − idle) × utilization`, utilization = served / the
+  serving node's nominal capacity. During a transition the serving node
+  draws load-proportional power while the co-billed node idles.
+* **Costing is single-sourced** (`fonpr/sim/costing.py`) and consumed by
+  both the env and the oracle DP, so regret stays exact under either cost
+  model — enforced by an oracle/env consistency test.
+* **SLO penalty** anchors to the hungriest tier's max-draw hourly cost
+  (D5's multiplier unchanged), preserving the breach ≫ provisioning
+  structure in watt-denominated economics.
+* **Reporting**: `info.step_energy_wh` (0.0 under the price model);
+  eval metrics gain `energy_kwh`. Results become kWh-denominated exactly
+  when the config says so — no separate code path.
+* **Calibration**: default watts are working placeholders. The lab rig
+  measures real draw (smart plug / RAPL) under `make load-profile` and
+  replaces them; that closes the "every term measurable" loop.
+* **Why this exists**: cell-sleep / capacity-scaling energy saving is the
+  industry's proven instance of this exact control problem; this section
+  makes FONPR's twin speak its language natively.
