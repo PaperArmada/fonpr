@@ -50,7 +50,10 @@ def main(argv: list[str] | None = None) -> int:
     train_parser.add_argument("--steps", type=int, default=500_000, help="Training steps.")
     train_parser.add_argument("--seed", type=int, default=0, help="Training seed.")
     train_parser.add_argument(
-        "--algo", default="dqn", choices=["dqn", "ppo"], help="Training algorithm."
+        "--algo",
+        default="ppo",  # ADR-0003
+        choices=["dqn", "ppo"],
+        help="Training algorithm (default ppo per ADR-0003; dqn retained for comparison).",
     )
 
     agent_parser = subparsers.add_parser(

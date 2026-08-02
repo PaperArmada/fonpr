@@ -1,6 +1,6 @@
 # ADR-0001: Foundation decisions for the modernization effort
 
-- **Status**: Accepted
+- **Status**: Accepted (D2 superseded by ADR-0003)
 - **Date**: 2026-08-01
 - **Decider**: Project owner (ratified in review of docs/SPECS.md)
 

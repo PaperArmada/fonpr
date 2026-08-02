@@ -15,9 +15,13 @@ when scheduled.
   once the V0 agent is re-expressed as a Policy over the live env.
 - S5 multi-seed training campaign (5 seeds) to upgrade the 2026-08-02
   preliminary benchmark to a citable result.
-- DQN training reliability study (campaign 2026-08-02 found 2/5 to 4/5 seed
-  failure): exploration schedule, learning rate, target-update interval;
-  then PPO as candidate replacement (requires ADR superseding ADR-0001/D2).
+- ~~DQN training reliability study~~ resolved by ADR-0003 (PPO default,
+  9/10 vs 4/10 convergence). Remaining research question: why no learner
+  finds cyclic scale-down even with a clock signal — probe longer
+  training, entropy schedule, or reward shaping; or conclude the
+  Discrete(3) action space is the limit and prioritize roadmap Phase 5.
+- Energy scenario family in the eval harness (EvalConfig extension) for
+  the first watt-denominated benchmark over configs/sim-energy.yaml.
 - Milan (Telecom Italia Big Data Challenge) trace converter:
   `fonpr trace convert-milan` — aggregate cell clusters (business,
   residential, citywide, event-day), interpolate 10-min source to tick

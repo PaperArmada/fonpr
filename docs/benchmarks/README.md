@@ -67,3 +67,36 @@ hyperparameter study, and evaluating PPO as the more stable on-policy
 alternative (algorithm change supersedes ADR-0001/D2 if adopted).
 Forecast-then-act remains the standing champion; the honest headline is
 unchanged — a 24-hour memory beats a 500k-step learner on this problem.
+
+## 2026-08-02 — PPO campaign: reliability solved, exploration question sharpened
+
+Identical protocol to the DQN campaign
+(`2026-08-02-campaign-ppo-plain/`, `-ppo-time/`). Mean total cost on
+`diurnal` per training seed:
+
+| Seed | PPO plain | PPO time-features |
+|---|---|---|
+| 0 | 33.94 | 34.01 |
+| 1 | 465.70 | 33.94 |
+| 2 | 33.94 | 33.94 |
+| 3 | 33.94 | 33.94 |
+| 4 | 33.94 | 33.94 |
+
+1. **Training reliability is solved.** 9/10 PPO seeds converge to the
+   always-large optimum vs 4/10 for DQN; with time features, **5/5** —
+   and converged seeds are bit-consistent (33.94 ± 0.00). This is the
+   evidence base for ADR-0003 (PPO replaces DQN as default).
+2. **The S4.4 bar is still not met.** Converged learners beat the
+   threshold heuristic (33.94 vs 34.90) but lose to reactive (30.68) and
+   forecast (27.91) on diurnal, and tie-or-lose on diurnal_bursty (47.69
+   vs forecast 47.32, reactive 46.15).
+3. **The open question is now precise**: even a reliable learner with a
+   clock signal converges to always-large instead of cyclic scale-down.
+   Optimizer stability is no longer the suspect; exploration/credit
+   assignment toward coordinated multi-step deviations is. Candidate
+   probes: longer training, entropy schedule, reward shaping on idle
+   headroom, or accepting that this action space is too coarse and moving
+   to roadmap Phase 5.
+
+Forecast-then-act remains the standing champion across all recorded
+campaigns.

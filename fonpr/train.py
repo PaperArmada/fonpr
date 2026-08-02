@@ -1,9 +1,9 @@
 """
 Agent training in the simulator (S5). Requires the [rl] extra.
 
-Two supported algorithms: DQN (ADR-0001/D2, the ratified default) and PPO
-(candidate under evaluation after the 2026-08-02 campaign exposed DQN
-training instability; adoption would supersede ADR-0001/D2).
+Two supported algorithms: PPO (the default per ADR-0003, adopted after
+the 2026-08-02 campaigns showed 9/10 PPO seeds converging vs 4/10 for
+DQN) and DQN (retained for comparison studies).
 
 Checkpoints carry the SimConfig they were trained against, so a policy can
 never be silently evaluated on a different plant than it learned. The
@@ -54,7 +54,7 @@ def train_agent(
     steps: int,
     seed: int,
     out_dir: Path,
-    algorithm: str = "dqn",
+    algorithm: str = "ppo",  # ADR-0003
     checkpoint_every: int = 50_000,
 ) -> Path:
     """Train per S5 and return the final checkpoint path."""
@@ -124,7 +124,7 @@ class DQNPolicy(AgentPolicy):
 
 
 def run_train_cli(
-    config_path: str | None, out_root: str, steps: int, seed: int, algorithm: str = "dqn"
+    config_path: str | None, out_root: str, steps: int, seed: int, algorithm: str = "ppo"
 ) -> int:
     """Entry point behind ``fonpr train``."""
     config = SimConfig.from_yaml(config_path) if config_path else SimConfig()

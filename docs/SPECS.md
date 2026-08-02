@@ -327,7 +327,7 @@ in ADR-0001. They are closed; changing one requires a superseding ADR.
 | # | Decision | Ratified value |
 |---|---|---|
 | D1 | RL library | Stable-Baselines3 |
-| D2 | Ported algorithm | DQN (archive SAC + BBO) |
+| D2 | Ported algorithm | ~~DQN~~ → **PPO** (superseded by ADR-0003; DQN retained for comparison, SAC + BBO archived) |
 | D3 | Python floor | 3.11 |
 | D4 | Trace file format | Parquet (CSV import) |
 | D5 | SLO target + penalty constants | 0.995 / 20× Large-instance hourly cost, per violation-minute (working values; owner may revise via ADR) |
