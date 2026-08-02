@@ -26,7 +26,7 @@ deployed against the live advisor/actuator loop without modification.
 | API | Gymnasium `Env` (`reset(seed, options)`, `step(action)` returning `(obs, reward, terminated, truncated, info)`) |
 | Observation space | `Box(shape=(samples, 3), dtype=float32)` — throughput (bytes/s), large-instance-on flag, small-instance-on flag. Identical to live env. |
 | Action space | `Discrete(3)`: 0 = NOOP, 1 = transition to Large, 2 = transition to Small. Identical to live env. |
-| `info` dict keys | `offered_load`, `served_load`, `slo_violation`, `instance_type`, `in_transition`, `step_cost_usd`, `step_revenue_usd` — required, stable names. |
+| `info` dict keys | `offered_load`, `served_load`, `slo_violation` (violation minutes), `instance_type`, `in_transition`, `step_cost_usd`, `step_penalty_usd`, `offered_series`, `served_series` (per-tick arrays, consumed by the oracle and plots), `action_applied` — required, stable names. (`step_revenue_usd` was removed with the revenue term, ADR-0001/D6.) |
 | Determinism | Same seed + same config ⇒ bit-identical trajectories. Enforced by test. |
 
 ### S1.2 Traffic model (offered load)
@@ -69,8 +69,9 @@ from the env seed.
   (defaults mirror live env).
 * Episode length: default 7 sim-days (672 steps). `truncated=True` at episode
   end; never `terminated` (continuous task, matching live semantics).
-* Wall-clock target: ≥ 10,000 steps/second single-core, so a full training
-  run completes in minutes.
+* Wall-clock requirement: a 500k-step training rollout completes in **single-
+  digit minutes on one laptop core**; hard floor 5,000 env steps/second
+  single-core (measured at implementation: ~9,000/s).
 
 ### S1.5 Configuration
 
