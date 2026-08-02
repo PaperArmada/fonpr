@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fonpr"
+version = "0.2.0"
+description = "RL/control agents for cost-optimal operation of a cloud-native 5G core"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "gymnasium>=0.29",
+    "PyYAML>=6.0",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+# Learned agent (S5). Kept optional: torch is heavy and the sim/eval/baseline
+# stack must stay installable without it.
+rl = ["stable-baselines3>=2.3"]
+# Live-cluster loop: advisor, action handler, AWS secrets backend.
+live = [
+    "prometheus-api-client>=0.5.3",
+    "PyGithub>=1.58.2",
+    "boto3>=1.26",
+]
+# Trace-replay file support (S1.6).
+trace = ["pyarrow>=14"]
+dev = ["pytest>=7.4", "ruff>=0.4"]
+
+[project.scripts]
+fonpr = "fonpr.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["fonpr*"]
+exclude = ["archive*", "tests*", "deployment*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Legacy modules are excluded until they are refactored under their own spec
+# sections (tracked in TODO.md). archive/ is permanently excluded (read-only).
+extend-exclude = [
+    "archive",
+    "fonpr/advisors",
+    "fonpr/action_handler",
+    "fonpr/utilities",
+    "fonpr/envs/live_env.py",
+    "fonpr/agent_v0.py",
+    "tests/test_advisor.py",
+    "tests/conftest.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+omit = ["archive/*", "fonpr/envs/live_env.py", "fonpr/agent_v0.py"]

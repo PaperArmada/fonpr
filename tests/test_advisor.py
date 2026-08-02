@@ -5,6 +5,13 @@ Test all functions related to agent advisors.
 import sys
 import os
 from unittest.mock import patch
+
+import pytest
+
+# Legacy test: requires the [live] extra. Skipped until rewritten onto
+# recorded fixtures per SPECS.md S8 (tracked in TODO.md).
+pytest.importorskip("prometheus_api_client")
+pytest.importorskip("nose")
 from nose.tools import assert_is_not_none
 
 # # Set path for local imports
