@@ -67,6 +67,9 @@ class TrafficConfig:
     burst_duration_minutes_min: float = 10.0
     burst_duration_minutes_max: float = 45.0
     drift_frac_per_day: float = 0.0
+    # S1.6: when set, offered load replays this trace file instead of the
+    # synthetic components above (which are then ignored).
+    trace_path: str | None = None
 
     def __post_init__(self) -> None:
         if self.base_load_bytes_per_sec <= 0:

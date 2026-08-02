@@ -49,7 +49,12 @@ class FONPRSimEnv(gym.Env):
     ) -> tuple[np.ndarray, dict[str, Any]]:
         super().reset(seed=seed)
         cfg = self.config
-        self._traffic = TrafficModel(cfg.traffic, cfg.time, self.np_random)
+        if cfg.traffic.trace_path is not None:
+            from fonpr.sim.trace import ReplayTrafficModel
+
+            self._traffic = ReplayTrafficModel.from_file(cfg.traffic.trace_path, cfg.time)
+        else:
+            self._traffic = TrafficModel(cfg.traffic, cfg.time, self.np_random)
         self._plant = PlantModel(cfg.plant, cfg.econ, cfg.time)
         self._step_count = 0
 

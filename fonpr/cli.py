@@ -42,6 +42,15 @@ def main(argv: list[str] | None = None) -> int:
     train_parser.add_argument("--steps", type=int, default=500_000, help="Training steps.")
     train_parser.add_argument("--seed", type=int, default=0, help="Training seed.")
 
+    trace_parser = subparsers.add_parser("trace", help="Trace utilities (S1.6).")
+    trace_sub = trace_parser.add_subparsers(dest="trace_command", required=True)
+    pull_parser = trace_sub.add_parser(
+        "pull", help="Export a UPF throughput trace from a live Prometheus."
+    )
+    pull_parser.add_argument("--endpoint", required=True, help="Prometheus ip:port.")
+    pull_parser.add_argument("--hours", type=float, default=24.0, help="Lookback window.")
+    pull_parser.add_argument("--out", default="trace.parquet", help="Output file path.")
+
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper(), logging.INFO),
@@ -63,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
         return run_train_cli(
             config_path=args.config, out_root=args.out, steps=args.steps, seed=args.seed
         )
+    if args.command == "trace":
+        from fonpr.sim.trace import pull_trace
+
+        out = pull_trace(endpoint=args.endpoint, hours=args.hours, out_path=args.out)
+        logger.info("trace written to %s", out)
+        return 0
     parser.error(f"unknown command {args.command!r}")
     return 2
 
