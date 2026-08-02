@@ -53,6 +53,14 @@ def main(argv: list[str] | None = None) -> int:
         "--algo", default="dqn", choices=["dqn", "ppo"], help="Training algorithm."
     )
 
+    agent_parser = subparsers.add_parser(
+        "run-agent", help="Run the live control loop (S12); dry-run actuation by default."
+    )
+    agent_parser.add_argument("--config", default=None, help="Path to a loop config YAML.")
+    agent_parser.add_argument(
+        "--once", action="store_true", help="Run a single iteration and exit."
+    )
+
     trace_parser = subparsers.add_parser("trace", help="Trace utilities (S1.6).")
     trace_sub = trace_parser.add_subparsers(dest="trace_command", required=True)
     pull_parser = trace_sub.add_parser(
@@ -112,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             algorithm=args.algo,
         )
+    if args.command == "run-agent":
+        from fonpr.loop import run_agent_cli
+
+        return run_agent_cli(config_path=args.config, once=args.once)
     if args.command == "trace":
         if args.trace_command == "pull":
             from fonpr.sim.trace import pull_trace

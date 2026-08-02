@@ -1,0 +1,7 @@
+# Default live-agent config (S12). DryRunActuator: observes and decides,
+# applies NOTHING. Switching `actuator` to helm/github is an explicit,
+# per-instance owner decision (CLAUDE.md).
+prom_endpoint: "localhost:9090"
+policy: "threshold"
+actuator: "dry-run"
+interval_minutes: 15

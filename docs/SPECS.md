@@ -344,3 +344,27 @@ in ADR-0001. They are closed; changing one requires a superseding ADR.
   (`DryRunActuator`) is the ceiling for anything cluster-facing this sprint.
 * No changes to the deployed DockerHub images or the existing k8s manifests
   until the new stack passes S4's acceptance bar.
+
+## S12. Live Control Loop (`fonpr run-agent`)
+
+The deployment counterpart of one sim step: Advisor → Policy → Actuator on
+a fixed cadence. Any Policy — baseline or trained checkpoint — runs here
+unchanged, because the observation contract is S1.1's exactly.
+
+* **LoopConfig**: frozen dataclass + strict YAML (canonical pattern);
+  embeds a `SimConfig` so live thresholds use the same vocabulary the
+  policies were benchmarked with. `actuator: dry-run` is the default and
+  the only value in any committed config template.
+* **ThroughputAdvisor**: builds `(samples, 3)` observations from live
+  Prometheus — UPF served throughput (range query, interpolated onto the
+  sample grid) plus instance-type flags from the UPF's node labels. Empty
+  query results raise; they never silently produce zeros.
+* **Action mapping**: NOOP → no actuation; LARGE/SMALL → a request pinning
+  the UPF to the corresponding instance-type node group via nodeSelector.
+* **Loop semantics**: one sanctioned broad catch — a failed iteration
+  (observation or actuation) is logged and skipped, never kills the loop
+  and never crashes into actuation. The loop returns a per-iteration
+  audit log. `--once` runs a single iteration for verification.
+* **Verification**: correctness against a real cluster is gated by S9's
+  `make verify` (this environment cannot host one); the advisor and loop
+  are contract-tested against recorded fixtures per S8.

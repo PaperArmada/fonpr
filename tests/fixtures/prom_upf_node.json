@@ -1,0 +1,9 @@
+[
+  {
+    "metric": {
+      "node": "kind-worker-2",
+      "label_node_kubernetes_io_instance_type": "t3.medium"
+    },
+    "value": [1722557640, "1"]
+  }
+]
