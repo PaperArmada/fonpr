@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Evaluate on the enriched sin/cos time-of-day observation (ADR-0002).",
     )
+    eval_parser.add_argument(
+        "--energy",
+        action="store_true",
+        help="Cost infrastructure via the S13 power model instead of the price table.",
+    )
 
     train_parser = subparsers.add_parser(
         "train", help="Train the DQN agent in the simulator (S5; requires the [rl] extra)."
@@ -112,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             quick=args.quick,
             dqn_checkpoint=args.dqn_checkpoint,
             time_features=args.time_features,
+            energy=args.energy,
         )
     if args.command == "train":
         from fonpr.train import run_train_cli

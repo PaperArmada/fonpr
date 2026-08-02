@@ -184,6 +184,11 @@ known-correct decisions.
 
 * Scenario suite: `steady`, `diurnal`, `diurnal+bursty` (default headline),
   `drift`, and (when traces exist) `trace-replay`.
+* Econ variant: every scenario runs under the price-table econ by default,
+  or under the S13 power model with `energy: true` in the eval config
+  (`fonpr eval --energy`). Costs remain USD either way; `energy_kwh` is
+  nonzero (and reported) only for energy-variant runs. Traffic, plant, and
+  seeds are identical across variants, so demand traces stay comparable.
 * N = 20 evaluation seeds per scenario, disjoint from training seeds.
 * Report mean ± 95% CI across seeds. No single-seed claims, anywhere.
 
@@ -391,7 +396,9 @@ the eval harness work unmodified.
   structure in watt-denominated economics.
 * **Reporting**: `info.step_energy_wh` (0.0 under the price model);
   eval metrics gain `energy_kwh`. Results become kWh-denominated exactly
-  when the config says so — no separate code path.
+  when the config says so — no separate code path. The S4 harness runs the
+  full scenario suite under this econ via `energy: true` / `fonpr eval
+  --energy`, with an Energy (kWh) column added to `results.md`.
 * **Calibration**: default watts are working placeholders. The lab rig
   measures real draw (smart plug / RAPL) under `make load-profile` and
   replaces them; that closes the "every term measurable" loop.
