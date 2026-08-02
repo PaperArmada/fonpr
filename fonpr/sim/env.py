@@ -5,6 +5,11 @@ API-identical to the live env: observation is a ``(samples, 3)`` float32
 array of [throughput, large-on, small-on] rows (oldest first), actions are
 ``Discrete(3)`` (NOOP / go-large / go-small), reward is
 ``-(infra_cost + slo_penalty)`` in USD (S2.1).
+
+Pool variant (S14, ADR-0004; selected by ``plant.pool``): observation rows
+are [throughput, current_count/max, target_count/max], actions are
+``Discrete(max_nodes - min_nodes + 1)`` selecting the target node count
+directly (choosing the current count is the no-op). Reward is identical.
 """
 
 from __future__ import annotations
@@ -18,8 +23,8 @@ import numpy as np
 from gymnasium import spaces
 
 from fonpr.sim.config import SimConfig
-from fonpr.sim.costing import series_cost_and_energy
-from fonpr.sim.plant import PlantModel
+from fonpr.sim.costing import pool_series_cost_and_energy, series_cost_and_energy
+from fonpr.sim.plant import PlantModel, PoolPlantModel
 from fonpr.sim.traffic import TrafficModel
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,7 @@ class FONPRSimEnv(gym.Env):
     def __init__(self, config: SimConfig | None = None):
         super().__init__()
         self.config = config or SimConfig()
+        self._pool = self.config.plant.pool
         samples = self.config.time.window_ticks
         n_cols = 5 if self.config.time.include_time_features else 3
         # sin/cos columns span [-1, 1]; the base columns are non-negative.
@@ -44,9 +50,11 @@ class FONPRSimEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=low, high=np.inf, shape=(samples, n_cols), dtype=np.float32
         )
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(
+            self._pool.n_actions if self._pool is not None else 3
+        )
         self._traffic: TrafficModel | None = None
-        self._plant: PlantModel | None = None
+        self._plant: PlantModel | PoolPlantModel | None = None
 
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
@@ -59,7 +67,10 @@ class FONPRSimEnv(gym.Env):
             self._traffic = ReplayTrafficModel.from_file(cfg.traffic.trace_path, cfg.time)
         else:
             self._traffic = TrafficModel(cfg.traffic, cfg.time, self.np_random)
-        self._plant = PlantModel(cfg.plant, cfg.econ, cfg.time)
+        if self._pool is not None:
+            self._plant = PoolPlantModel(self._pool, cfg.econ, cfg.time)
+        else:
+            self._plant = PlantModel(cfg.plant, cfg.econ, cfg.time)
         self._step_count = 0
 
         # Warm-up: fill the observation window before the episode starts.
@@ -68,8 +79,12 @@ class FONPRSimEnv(gym.Env):
         offered = self._traffic.advance(cfg.time.window_ticks)
         result = self._plant.advance(offered)
         self._throughput_hist = result.served.copy()
-        self._large_hist = result.large_on.copy()
-        self._small_hist = result.small_on.copy()
+        if self._pool is not None:
+            self._count_hist = result.active_count / self._pool.max_nodes
+            self._target_hist = result.target_count / self._pool.max_nodes
+        else:
+            self._large_hist = result.large_on.copy()
+            self._small_hist = result.small_on.copy()
         if cfg.time.include_time_features:
             self._sin_hist, self._cos_hist = self._time_features(cfg.time.window_ticks)
 
@@ -96,7 +111,9 @@ class FONPRSimEnv(gym.Env):
         cfg = self.config
 
         applied = False
-        if action == ACTION_LARGE:
+        if self._pool is not None:
+            applied = self._plant.request_target(self._pool.count_of_action(int(action)))
+        elif action == ACTION_LARGE:
             applied = self._plant.request_transition("large")
         elif action == ACTION_SMALL:
             applied = self._plant.request_transition("small")
@@ -109,22 +126,39 @@ class FONPRSimEnv(gym.Env):
         violation_ticks = int(np.sum(ratio < cfg.econ.slo_target))
         violation_minutes = violation_ticks * cfg.time.tick_minutes
         penalty = violation_minutes * cfg.econ.penalty_per_violation_minute_usd
-        infra_cost, energy_wh = series_cost_and_energy(
-            cfg.econ,
-            cfg.plant,
-            cfg.time.tick_minutes,
-            result.served,
-            result.large_on,
-            result.small_on,
-            result.serving_large,
-            result.infra_cost_usd,
-        )
+        if self._pool is not None:
+            infra_cost, energy_wh = pool_series_cost_and_energy(
+                cfg.econ,
+                self._pool,
+                cfg.time.tick_minutes,
+                result.served,
+                result.active_count,
+                result.billed_count,
+                result.infra_cost_usd,
+            )
+        else:
+            infra_cost, energy_wh = series_cost_and_energy(
+                cfg.econ,
+                cfg.plant,
+                cfg.time.tick_minutes,
+                result.served,
+                result.large_on,
+                result.small_on,
+                result.serving_large,
+                result.infra_cost_usd,
+            )
         reward = -(infra_cost + penalty)
 
         window = cfg.time.window_ticks
         self._throughput_hist = np.concatenate([self._throughput_hist, result.served])[-window:]
-        self._large_hist = np.concatenate([self._large_hist, result.large_on])[-window:]
-        self._small_hist = np.concatenate([self._small_hist, result.small_on])[-window:]
+        if self._pool is not None:
+            counts = result.active_count / self._pool.max_nodes
+            targets = result.target_count / self._pool.max_nodes
+            self._count_hist = np.concatenate([self._count_hist, counts])[-window:]
+            self._target_hist = np.concatenate([self._target_hist, targets])[-window:]
+        else:
+            self._large_hist = np.concatenate([self._large_hist, result.large_on])[-window:]
+            self._small_hist = np.concatenate([self._small_hist, result.small_on])[-window:]
         if cfg.time.include_time_features:
             sin_new, cos_new = self._time_features(len(offered))
             self._sin_hist = np.concatenate([self._sin_hist, sin_new])[-window:]
@@ -158,7 +192,10 @@ class FONPRSimEnv(gym.Env):
         return np.sin(angle), np.cos(angle)
 
     def _observation(self) -> np.ndarray:
-        columns = [self._throughput_hist, self._large_hist, self._small_hist]
+        if self._pool is not None:
+            columns = [self._throughput_hist, self._count_hist, self._target_hist]
+        else:
+            columns = [self._throughput_hist, self._large_hist, self._small_hist]
         if self.config.time.include_time_features:
             columns += [self._sin_hist, self._cos_hist]
         return np.stack(columns, axis=1).astype(np.float32)
@@ -174,11 +211,18 @@ class FONPRSimEnv(gym.Env):
         infra_cost_usd: float,
         energy_wh: float,
     ) -> dict[str, Any]:
+        if self._pool is not None:
+            instance_type = self._pool.node_type
+            node_count = int(self._plant.active)
+        else:
+            instance_type = self._plant.active_instance_type
+            node_count = None
         return {
             "offered_load": float(offered.mean()),
             "served_load": float(result.served.mean()),
             "slo_violation": float(violation_minutes),
-            "instance_type": self._plant.active_instance_type,
+            "instance_type": instance_type,
+            "node_count": node_count,  # None outside the pool variant (S14)
             "in_transition": self._plant.in_transition,
             "step_cost_usd": float(infra_cost_usd),
             "step_penalty_usd": float(penalty_usd),

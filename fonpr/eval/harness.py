@@ -19,7 +19,14 @@ import yaml
 
 from fonpr.policies import OraclePolicy, Policy, make_baselines, plan_oracle_actions
 from fonpr.sim import FONPRSimEnv, SimConfig
-from fonpr.sim.config import EconConfig, PowerConfig, TimeConfig, TrafficConfig
+from fonpr.sim.config import (
+    EconConfig,
+    PlantConfig,
+    PoolConfig,
+    PowerConfig,
+    TimeConfig,
+    TrafficConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +48,9 @@ class EvalConfig:
     # S13: derive infra cost from the power model (PowerConfig defaults,
     # matching configs/sim-energy.yaml) instead of the cloud price table.
     energy: bool = False
+    # S14/ADR-0004: run the pool plant (PoolConfig defaults, matching
+    # configs/sim-pool.yaml). Pool costs compare only within pool bundles.
+    pool: bool = False
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> EvalConfig:
@@ -60,9 +70,10 @@ def scenario_config(
     episode_days: float,
     include_time_features: bool = False,
     energy: bool = False,
+    pool: bool = False,
 ) -> SimConfig:
-    """Named traffic scenarios (S4.2) over the default plant, under either
-    the price-table econ (default) or the S13 power-model econ."""
+    """Named traffic scenarios (S4.2) over the default or pool plant (S14),
+    under either the price-table econ (default) or the S13 power econ."""
     time = TimeConfig(episode_days=episode_days, include_time_features=include_time_features)
     if name == "steady":
         traffic = TrafficConfig(diurnal_amplitude=0.0, burst_rate_per_day=0.0)
@@ -75,7 +86,8 @@ def scenario_config(
     else:
         raise ValueError(f"unknown scenario {name!r}")
     econ = EconConfig(power=PowerConfig()) if energy else EconConfig()
-    return SimConfig(time=time, traffic=traffic, econ=econ)
+    plant = PlantConfig(pool=PoolConfig()) if pool else PlantConfig()
+    return SimConfig(time=time, traffic=traffic, plant=plant, econ=econ)
 
 
 @dataclass
@@ -153,6 +165,7 @@ def evaluate(
             eval_cfg.episode_days,
             eval_cfg.include_time_features,
             eval_cfg.energy,
+            eval_cfg.pool,
         )
         env = FONPRSimEnv(sim_cfg)
         timelines[scenario] = {}
@@ -222,6 +235,7 @@ def run_eval_cli(
     dqn_checkpoint: list[str] | None = None,
     time_features: bool = False,
     energy: bool = False,
+    pool: bool = False,
 ) -> int:
     """Entry point behind ``fonpr eval`` (S4.3)."""
     from fonpr.eval.report import write_report
@@ -235,9 +249,10 @@ def run_eval_cli(
             episode_days=2.0,
             include_time_features=time_features,
             energy=energy,
+            pool=pool,
         )
     else:
-        eval_cfg = EvalConfig(include_time_features=time_features, energy=energy)
+        eval_cfg = EvalConfig(include_time_features=time_features, energy=energy, pool=pool)
 
     extra_policies = None
     if dqn_checkpoint:

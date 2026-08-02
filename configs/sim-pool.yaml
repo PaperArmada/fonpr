@@ -1,0 +1,13 @@
+# Pool plant variant (S14, ADR-0004): homogeneous small-node pool where
+# the action selects the target node count. Values shown are the defaults;
+# 3 nodes match the legacy large tier's capacity (D7 calibration).
+# Compose with configs/sim-energy.yaml's econ.power block for the
+# watt-denominated cell-sleep setting.
+plant:
+  pool:
+    node_type: t3.medium
+    node_capacity_bytes_per_sec: 8.0e6
+    min_nodes: 1
+    max_nodes: 8
+    initial_nodes: 1
+    transition_lag_minutes: 5

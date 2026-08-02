@@ -36,3 +36,6 @@ when scheduled.
   Parquet with train/eval week split; ODbL attribution note.
 - S9 local stack (`make local-stack`): needs a Docker-capable machine;
   build and verify there rather than committing an untested Makefile.
+- S12 live-loop actuation mapping for pool actions (S14): translate a
+  target node count to a replicaCount/ASG-size actuation request; the
+  current mapping only covers binary LARGE/SMALL nodeSelector swaps.

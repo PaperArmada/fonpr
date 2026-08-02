@@ -26,7 +26,7 @@ deployed against the live advisor/actuator loop without modification.
 | API | Gymnasium `Env` (`reset(seed, options)`, `step(action)` returning `(obs, reward, terminated, truncated, info)`) |
 | Observation space | `Box(shape=(samples, 3), dtype=float32)` — throughput (bytes/s), large-instance-on flag, small-instance-on flag. Identical to live env. With `time.include_time_features` (ADR-0002, default off): shape `(samples, 5)`, appending per-tick `sin/cos` of time-of-day as columns 3–4. |
 | Action space | `Discrete(3)`: 0 = NOOP, 1 = transition to Large, 2 = transition to Small. Identical to live env. |
-| `info` dict keys | `offered_load`, `served_load`, `slo_violation` (violation minutes), `instance_type`, `in_transition`, `step_cost_usd`, `step_penalty_usd`, `step_energy_wh` (S13; 0.0 under the price model), `offered_series`, `served_series`, `capacity_series` (per-tick arrays, consumed by the oracle and plots), `action_applied` — required, stable names. (`step_revenue_usd` was removed with the revenue term, ADR-0001/D6.) |
+| `info` dict keys | `offered_load`, `served_load`, `slo_violation` (violation minutes), `instance_type`, `in_transition`, `step_cost_usd`, `step_penalty_usd`, `step_energy_wh` (S13; 0.0 under the price model), `node_count` (S14; None outside the pool variant), `offered_series`, `served_series`, `capacity_series` (per-tick arrays, consumed by the oracle and plots), `action_applied` — required, stable names. (`step_revenue_usd` was removed with the revenue term, ADR-0001/D6.) |
 | Determinism | Same seed + same config ⇒ bit-identical trajectories. Enforced by test. |
 
 ### S1.2 Traffic model (offered load)

@@ -73,14 +73,98 @@ def _step_cost(
     return infra + violation_minutes * econ.penalty_per_violation_minute_usd
 
 
+def _pool_step_cost(
+    config: SimConfig, state: int, target: int, offered: np.ndarray
+) -> float:
+    """Pool-variant (S14) counterpart of :func:`_step_cost` over node counts.
+
+    Mirrors PoolPlantModel: during the lag, capacity stays at the old
+    count while max(state, target) nodes bill.
+    """
+    from fonpr.sim.costing import pool_series_cost_and_energy
+
+    pool, econ, time_cfg = config.plant.pool, config.econ, config.time
+    tick_hours = time_cfg.tick_minutes / 60.0
+    c = pool.node_capacity_bytes_per_sec
+    n = len(offered)
+    capacity = np.empty(n)
+    active = np.empty(n)
+    billed = np.empty(n)
+    node_hourly = 0.0 if econ.power is not None else econ.hourly_cost(pool.node_type)
+
+    if target == state:
+        capacity[:] = state * c
+        active[:] = state
+        billed[:] = state
+        price_cost = node_hourly * state * tick_hours * n
+    else:
+        lag = min(round(pool.transition_lag_minutes / time_cfg.tick_minutes), n)
+        peak = max(state, target)
+        capacity[:lag] = state * c
+        active[:lag] = state
+        billed[:lag] = peak
+        capacity[lag:] = target * c
+        active[lag:] = target
+        billed[lag:] = target
+        price_cost = node_hourly * tick_hours * (peak * lag + target * (n - lag))
+
+    served = np.minimum(offered, capacity)
+    infra, _ = pool_series_cost_and_energy(
+        econ, pool, time_cfg.tick_minutes, served, active, billed, price_cost
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(offered > 0, served / offered, 1.0)
+    violation_minutes = float(np.sum(ratio < econ.slo_target)) * time_cfg.tick_minutes
+    return infra + violation_minutes * econ.penalty_per_violation_minute_usd
+
+
+def _plan_pool(
+    offered_steps: list[np.ndarray], config: SimConfig
+) -> tuple[list[int], float]:
+    """Backward DP over the K node-count states (S14)."""
+    pool = config.plant.pool
+    states = range(pool.min_nodes, pool.max_nodes + 1)
+    start = pool.initial_nodes
+    n_steps = len(offered_steps)
+    value = {s: 0.0 for s in states}
+    best_target: list[dict[int, int]] = [{} for _ in range(n_steps)]
+
+    for t in range(n_steps - 1, -1, -1):
+        new_value = {}
+        for state in states:
+            best = None
+            for target in states:
+                cost = _pool_step_cost(config, state, target, offered_steps[t])
+                cost += value[target]
+                if best is None or cost < best[0]:
+                    best = (cost, target)
+            new_value[state] = best[0]
+            best_target[t][state] = best[1]
+        value = new_value
+
+    actions: list[int] = []
+    state = start
+    for t in range(n_steps):
+        target = best_target[t][state]
+        actions.append(pool.action_of_count(target))
+        state = target
+    return actions, value[start]
+
+
 def plan_oracle_actions(
     offered_steps: list[np.ndarray], config: SimConfig, initial_state: str | None = None
 ) -> tuple[list[int], float]:
     """Backward-DP over per-step offered-load arrays.
 
     Returns (actions, optimal_total_cost) starting from ``initial_state``
-    (defaults to the plant's configured initial instance).
+    (defaults to the plant's configured initial instance). In the pool
+    variant (S14) the DP runs over node counts and ``initial_state`` must
+    be left unset.
     """
+    if config.plant.pool is not None:
+        if initial_state is not None:
+            raise ValueError("initial_state is a binary-plant parameter (S14)")
+        return _plan_pool(offered_steps, config)
     start = initial_state or config.plant.initial_instance
     n_steps = len(offered_steps)
     # value[s] = minimal cost-to-go from state s at the current step boundary.

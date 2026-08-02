@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from fonpr.sim.config import EconConfig, PlantConfig
+from fonpr.sim.config import EconConfig, PlantConfig, PoolConfig
 
 
 def series_cost_and_energy(
@@ -58,6 +58,39 @@ def series_cost_and_energy(
             )
             watts += power.idle_watts[other]
         energy_wh += watts * tick_hours
+
+    cost = energy_wh / 1000.0 * power.electricity_usd_per_kwh
+    return cost, energy_wh
+
+
+def pool_series_cost_and_energy(
+    econ: EconConfig,
+    pool: PoolConfig,
+    tick_minutes: float,
+    served: np.ndarray,
+    active_count: np.ndarray,
+    billed_count: np.ndarray,
+    price_model_cost: float,
+) -> tuple[float, float]:
+    """Pool-variant (S14) counterpart of :func:`series_cost_and_energy`.
+
+    Serving nodes share load evenly (util = served / (active x c)), each
+    drawing load-proportional power; billed-but-not-serving nodes (a resize
+    in flight) idle.
+    """
+    if econ.power is None:
+        return price_model_cost, 0.0
+
+    power = econ.power
+    tick_hours = tick_minutes / 60.0
+    utilization = np.clip(
+        served / (active_count * pool.node_capacity_bytes_per_sec), 0.0, 1.0
+    )
+    idle = power.idle_watts[pool.node_type]
+    span = power.max_watts[pool.node_type] - idle
+    serving_watts = active_count * (idle + span * utilization)
+    extra_idle_watts = (billed_count - active_count) * idle
+    energy_wh = float(np.sum(serving_watts + extra_idle_watts) * tick_hours)
 
     cost = energy_wh / 1000.0 * power.electricity_usd_per_kwh
     return cost, energy_wh

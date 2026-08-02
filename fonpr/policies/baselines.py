@@ -8,10 +8,18 @@ sees offered load directly.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
-from fonpr.policies.base import Policy, current_instance, observed_throughput
-from fonpr.sim.config import SimConfig
+from fonpr.policies.base import (
+    Policy,
+    current_instance,
+    current_node_count,
+    observed_throughput,
+    pool_in_transition,
+)
+from fonpr.sim.config import PoolConfig, SimConfig
 from fonpr.sim.env import ACTION_LARGE, ACTION_NOOP, ACTION_SMALL
 
 
@@ -136,8 +144,141 @@ class ForecastPolicy(Policy):
         return ACTION_SMALL if instance == "large" else ACTION_NOOP
 
 
+class NoopPoolPolicy(Policy):
+    """B0 (pool, S14): always targets the current count — never resizes."""
+
+    name = "noop"
+
+    def __init__(self, config: SimConfig):
+        self._pool: PoolConfig = config.plant.pool
+
+    def act(self, obs: np.ndarray) -> int:
+        return self._pool.action_of_count(current_node_count(obs, self._pool.max_nodes))
+
+
+class ThresholdPoolPolicy(Policy):
+    """B1 (pool, S14): stepwise +/-1 autoscaler with hysteresis on pool
+    utilization, patience, and cooldown — the k8s-operator idiom."""
+
+    name = "threshold"
+
+    def __init__(
+        self,
+        config: SimConfig,
+        up_threshold: float = 0.8,
+        down_threshold: float = 0.5,
+        up_patience: int = 2,
+        down_patience: int = 4,
+        cooldown_steps: int = 4,
+    ):
+        self._pool: PoolConfig = config.plant.pool
+        self._up = up_threshold
+        self._down = down_threshold
+        self._up_patience = up_patience
+        self._down_patience = down_patience
+        self._cooldown_steps = cooldown_steps
+        self.reset()
+
+    def reset(self) -> None:
+        self._up_count = 0
+        self._down_count = 0
+        self._cooldown = 0
+
+    def act(self, obs: np.ndarray) -> int:
+        pool = self._pool
+        count = current_node_count(obs, pool.max_nodes)
+        hold = pool.action_of_count(count)
+        if self._cooldown > 0:
+            self._cooldown -= 1
+            return hold
+        if pool_in_transition(obs, pool.max_nodes):
+            return hold
+        util = observed_throughput(obs) / (count * pool.node_capacity_bytes_per_sec)
+
+        if util > self._up and count < pool.max_nodes:
+            self._down_count = 0
+            self._up_count += 1
+            if self._up_count >= self._up_patience:
+                self._up_count = 0
+                self._cooldown = self._cooldown_steps
+                return pool.action_of_count(count + 1)
+        elif util < self._down and count > pool.min_nodes:
+            self._up_count = 0
+            self._down_count += 1
+            if self._down_count >= self._down_patience:
+                self._down_count = 0
+                self._cooldown = self._cooldown_steps
+                return pool.action_of_count(count - 1)
+        else:
+            self._up_count = 0
+            self._down_count = 0
+        return hold
+
+
+class ReactivePoolPolicy(Policy):
+    """B2 (pool, S14): the literal HPA formula — desired = ceil(load / (target x c))."""
+
+    name = "reactive"
+
+    def __init__(self, config: SimConfig, target_utilization: float = 0.7):
+        self._pool: PoolConfig = config.plant.pool
+        self._target = target_utilization
+
+    def act(self, obs: np.ndarray) -> int:
+        pool = self._pool
+        count = current_node_count(obs, pool.max_nodes)
+        if pool_in_transition(obs, pool.max_nodes):
+            return pool.action_of_count(count)
+        tput = observed_throughput(obs)
+        desired = math.ceil(tput / (self._target * pool.node_capacity_bytes_per_sec))
+        desired = min(max(desired, pool.min_nodes), pool.max_nodes)
+        return pool.action_of_count(desired)
+
+
+class ForecastPoolPolicy(Policy):
+    """B3 (pool, S14): seasonal-naive forecast, then size the count to fit.
+
+    Saturated history at count k forecasts k x c; x margin that demands
+    k + 1 nodes, so a saturated yesterday correctly scales up today.
+    """
+
+    name = "forecast"
+
+    def __init__(self, config: SimConfig, safety_margin: float = 1.15):
+        self._pool: PoolConfig = config.plant.pool
+        self._margin = safety_margin
+        self._steps_per_day = int(24 * 60 / config.time.step_minutes)
+        self.reset()
+
+    def reset(self) -> None:
+        self._history: list[float] = []
+
+    def act(self, obs: np.ndarray) -> int:
+        pool = self._pool
+        tput = observed_throughput(obs)
+        self._history.append(tput)
+        if len(self._history) > self._steps_per_day:
+            forecast = self._history[-self._steps_per_day]
+        else:
+            forecast = tput
+        count = current_node_count(obs, pool.max_nodes)
+        if pool_in_transition(obs, pool.max_nodes):
+            return pool.action_of_count(count)
+        needed = forecast * self._margin
+        desired = math.ceil(needed / pool.node_capacity_bytes_per_sec)
+        desired = min(max(desired, pool.min_nodes), pool.max_nodes)
+        return pool.action_of_count(desired)
+
+
 def make_baselines(config: SimConfig) -> list[Policy]:
-    """The standard baseline suite, in reporting order."""
+    """The standard baseline suite, in reporting order (variant-aware, S14)."""
+    if config.plant.pool is not None:
+        return [
+            NoopPoolPolicy(config),
+            ThresholdPoolPolicy(config),
+            ReactivePoolPolicy(config),
+            ForecastPoolPolicy(config),
+        ]
     return [
         NoopPolicy(),
         ThresholdPolicy(config),

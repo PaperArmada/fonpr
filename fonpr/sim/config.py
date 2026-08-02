@@ -89,8 +89,50 @@ class TrafficConfig:
 
 
 @dataclass(frozen=True)
+class PoolConfig:
+    """Pool plant variant (S14, ADR-0004): homogeneous node pool.
+
+    The action selects the target node count directly. Defaults keep D7
+    calibration: 3 nodes match the legacy large tier's capacity.
+    """
+
+    node_type: str = "t3.medium"
+    node_capacity_bytes_per_sec: float = 8.0e6
+    min_nodes: int = 1
+    max_nodes: int = 8
+    initial_nodes: int = 1
+    transition_lag_minutes: int = 5
+
+    def __post_init__(self) -> None:
+        if self.node_capacity_bytes_per_sec <= 0:
+            raise ValueError("node_capacity_bytes_per_sec must be positive")
+        if not 1 <= self.min_nodes <= self.max_nodes:
+            raise ValueError("need 1 <= min_nodes <= max_nodes")
+        if self.min_nodes == self.max_nodes:
+            raise ValueError("max_nodes must exceed min_nodes (else there is no action)")
+        if not self.min_nodes <= self.initial_nodes <= self.max_nodes:
+            raise ValueError("initial_nodes must be within [min_nodes, max_nodes]")
+        if self.transition_lag_minutes < 0:
+            raise ValueError("transition_lag_minutes must be >= 0")
+
+    @property
+    def n_actions(self) -> int:
+        return self.max_nodes - self.min_nodes + 1
+
+    def count_of_action(self, action: int) -> int:
+        if not 0 <= action < self.n_actions:
+            raise ValueError(f"action {action!r} outside [0, {self.n_actions})")
+        return self.min_nodes + action
+
+    def action_of_count(self, count: int) -> int:
+        if not self.min_nodes <= count <= self.max_nodes:
+            raise ValueError(f"count {count!r} outside [{self.min_nodes}, {self.max_nodes}]")
+        return count - self.min_nodes
+
+
+@dataclass(frozen=True)
 class PlantConfig:
-    """Cluster response model (S1.3). Capacities calibrated per ADR-0001/D7."""
+    """Cluster response model (S1.3; pool variant S14). Capacities per ADR-0001/D7."""
 
     large_instance_type: str = "m4.xlarge"
     small_instance_type: str = "t3.medium"
@@ -98,6 +140,9 @@ class PlantConfig:
     small_capacity_bytes_per_sec: float = 8.0e6  # 0.4x default peak diurnal
     transition_lag_minutes: int = 5
     initial_instance: str = "small"
+    # S14: when set, the pool plant replaces the binary two-tier plant and
+    # the fields above are ignored.
+    pool: PoolConfig | None = None
 
     def __post_init__(self) -> None:
         if self.initial_instance not in ("small", "large"):
@@ -200,7 +245,11 @@ class SimConfig:
     econ: EconConfig = field(default_factory=EconConfig)
 
     def __post_init__(self) -> None:
-        for instance_type in (self.plant.large_instance_type, self.plant.small_instance_type):
+        if self.plant.pool is not None:
+            billed_types: tuple[str, ...] = (self.plant.pool.node_type,)
+        else:
+            billed_types = (self.plant.large_instance_type, self.plant.small_instance_type)
+        for instance_type in billed_types:
             if self.econ.power is not None:
                 if instance_type not in self.econ.power.idle_watts:
                     raise KeyError(f"instance type {instance_type!r} not in power model")
@@ -260,4 +309,6 @@ _NESTED_TYPES: dict[str, type] = {
     "EconConfig": EconConfig,
     "PowerConfig": PowerConfig,
     "PowerConfig | None": PowerConfig,
+    "PoolConfig": PoolConfig,
+    "PoolConfig | None": PoolConfig,
 }

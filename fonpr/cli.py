@@ -46,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Cost infrastructure via the S13 power model instead of the price table.",
     )
+    eval_parser.add_argument(
+        "--pool",
+        action="store_true",
+        help="Run the replica-count pool plant (S14, ADR-0004) instead of binary sizing.",
+    )
 
     train_parser = subparsers.add_parser(
         "train", help="Train the DQN agent in the simulator (S5; requires the [rl] extra)."
@@ -118,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             dqn_checkpoint=args.dqn_checkpoint,
             time_features=args.time_features,
             energy=args.energy,
+            pool=args.pool,
         )
     if args.command == "train":
         from fonpr.train import run_train_cli
