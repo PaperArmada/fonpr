@@ -138,3 +138,46 @@ Three findings:
    *constraint trade* (kWh vs violation minutes), not a cheaper point on
    the same axis — the energy column exists so that trade is measured, not
    asserted.
+
+## 2026-08-02 — pool campaign (S14/ADR-0004): the learner beats the baselines
+
+The ADR-0004 hypothesis test: PPO x 5 training seeds x 2 observation
+variants, 500k steps, on the replica-count pool plant
+(`2026-08-02-campaign-pool-plain/`, `-pool-time/`); full S4 protocol,
+20 eval seeds. Pool costs compare only within pool bundles (S4.2).
+
+Headline scenario `diurnal_bursty` (oracle 17.29): every PPO seed lands
+32.03-33.23, ahead of reactive 33.88, forecast 36.97, threshold 40.99.
+Clean `diurnal` (oracle 15.29): forecast 15.90 < reactive 19.49 <
+threshold 20.35 < every PPO seed 21.36-22.06.
+
+1. **The exploration-cliff diagnosis is vindicated on the headline
+   scenario.** With graded actions, all 10/10 seeds converge (tight
+   clusters, no collapse — PPO reliability holds at 8 actions) and the
+   "go large once" pathology is gone: learners take ~20-25 resize
+   actions per episode (plain) and absorb bursts at a third fewer
+   violation minutes than the forecaster. First learners in this
+   project's history to top both required baselines on the headline
+   scenario mean.
+2. **S4.4 verdict — split, reported precisely.** Against threshold (B1):
+   unpaired 95% CIs are decisively non-overlapping for all 10 seeds —
+   that half of the bar is met. Against forecast (B3): unpaired CIs
+   overlap marginally (worst PPO upper 34.16 vs forecast lower 33.65,
+   a $0.10-$0.51 overlap) because both policies share the same offered
+   traces and the CIs carry common between-seed traffic variance. The
+   paired per-eval-seed test removes that shared variance: every one of
+   the 10 seeds beats forecast by +$3.74 to +$4.94/week with the 95% CI
+   of the paired difference excluding zero (14-16/20 eval-seed wins),
+   and beats threshold 20/20. Under the letter of S4.2's N=20 unpaired
+   CIs the bar is not yet formally met; under the paired analysis it is.
+   Whether S4.4 should name the paired test (statistically correct for
+   a shared-seed protocol) is an owner decision, not an in-session one.
+3. **The clean-diurnal cyclic harvest is STILL unclaimed.** On pure
+   diurnal traffic every learner parks near 3 nodes (~3 actions,
+   regret ~$6.07/week) instead of tracking the cycle; time features
+   again change nothing (and add churn). Graded actions fixed *reactive*
+   dynamism, not *anticipatory scheduling*. The open question survives
+   in sharper form: the learner acts when the state punishes it within
+   a step, but never learns to act ahead of a predictable pattern —
+   which is exactly the forecaster's one trick, and on clean diurnal it
+   still wins by it.

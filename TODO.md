@@ -24,11 +24,14 @@ when scheduled.
   --energy`; first watt-denominated benchmark recorded in
   docs/benchmarks/2026-08-02-energy-baselines/). Follow-up: re-run after
   the lab rig replaces placeholder watts with measured draw.
-- Proposed ADR-0004 (awaiting owner sign-off): replica-count action space
-  (plant v2, homogeneous small-node pool, action = target count) to
-  dissolve the Discrete(3) exploration cliff; generalized baselines +
-  oracle DP over K states; fresh 5-seed PPO campaign as the hypothesis
-  test. SAC/continuous stays Phase 5 pending this evidence.
+- ~~ADR-0004 replica-count action space~~ accepted, implemented (S14),
+  and hypothesis-tested (docs/benchmarks/2026-08-02-campaign-pool-*).
+  Open follow-ups: (a) owner decision on whether S4.4 should specify the
+  paired per-eval-seed test for shared-seed protocols; (b) the surviving
+  research question — learners are reactive, never anticipatory: no
+  cyclic scale-down on clean diurnal even with a clock and graded
+  actions; (c) pool + energy (--pool --energy) campaign = the cell-sleep
+  setting proper.
 - Milan (Telecom Italia Big Data Challenge) trace converter:
   `fonpr trace convert-milan` — aggregate cell clusters (business,
   residential, citywide, event-day), interpolate 10-min source to tick
