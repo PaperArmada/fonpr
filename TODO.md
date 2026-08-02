@@ -20,8 +20,15 @@ when scheduled.
   finds cyclic scale-down even with a clock signal — probe longer
   training, entropy schedule, or reward shaping; or conclude the
   Discrete(3) action space is the limit and prioritize roadmap Phase 5.
-- Energy scenario family in the eval harness (EvalConfig extension) for
-  the first watt-denominated benchmark over configs/sim-energy.yaml.
+- ~~Energy scenario family in the eval harness~~ done (`fonpr eval
+  --energy`; first watt-denominated benchmark recorded in
+  docs/benchmarks/2026-08-02-energy-baselines/). Follow-up: re-run after
+  the lab rig replaces placeholder watts with measured draw.
+- Proposed ADR-0004 (awaiting owner sign-off): replica-count action space
+  (plant v2, homogeneous small-node pool, action = target count) to
+  dissolve the Discrete(3) exploration cliff; generalized baselines +
+  oracle DP over K states; fresh 5-seed PPO campaign as the hypothesis
+  test. SAC/continuous stays Phase 5 pending this evidence.
 - Milan (Telecom Italia Big Data Challenge) trace converter:
   `fonpr trace convert-milan` — aggregate cell clusters (business,
   residential, citywide, event-day), interpolate 10-min source to tick

@@ -100,3 +100,41 @@ Identical protocol to the DQN campaign
 
 Forecast-then-act remains the standing champion across all recorded
 campaigns.
+
+## 2026-08-02 — first watt-denominated benchmark (S13 energy variant)
+
+Full S4 protocol under the power-model econ
+(`2026-08-02-energy-baselines/`): 4 scenarios x 20 eval seeds, baselines +
+oracle + the converged PPO seed-0 checkpoint (trained under the *price*
+model — this row is a zero-shot econ-transfer test, not an energy-trained
+agent). Placeholder watts per S13; absolute dollars will change when the
+lab rig calibrates real draw.
+
+Headline numbers (diurnal / diurnal_bursty, total cost USD):
+oracle 3.88 / 6.23, forecast 3.92 / 7.18, reactive 4.03 / 6.64,
+ppo 4.16 / 6.50, threshold 4.32 / 6.66, noop 81.63 / 82.74.
+
+Three findings:
+
+1. **Energy economics compress the scale-down prize by an order of
+   magnitude.** Under the price table the large:small cost ratio is ~4.8:1;
+   under load-proportional power the *idle* ratio is 2:1 and utilization
+   dominates, so always-large regret on diurnal falls from ~$7/week
+   (25% of oracle) to $0.44/week (11%). Cyclic scale-down is still optimal
+   (the oracle takes ~15 actions/week) — it is just worth 10x less. The
+   granularity of the actuator, not the schedule, becomes the binding
+   lever, which is evidence for the replica-count action-space direction.
+2. **The price-trained PPO transfers cleanly and tops the non-oracle table
+   on the headline scenario** (diurnal_bursty: 6.50 vs reactive 6.64,
+   threshold 6.66, forecast 7.18; lowest regret 0.27). All CIs overlap, so
+   S4.4 is NOT met and no superiority claim attaches — but the always-large
+   policy it learned is near-optimal under burst-exposed watt economics,
+   where forecasting's aggressive scale-down buys little and costs
+   violation minutes. First scenario family where the learner is not
+   behind the forecaster.
+3. **Cost-minimal is not energy-minimal, and the harness now shows the
+   gap.** NOOP burns the fewest kWh (19.4) while destroying the SLO; the
+   oracle spends 31.9-34.9 kWh. Any future "green" objective is a
+   *constraint trade* (kWh vs violation minutes), not a cheaper point on
+   the same axis — the energy column exists so that trade is measured, not
+   asserted.
