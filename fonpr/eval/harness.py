@@ -195,7 +195,12 @@ def git_sha() -> str:
         return "unknown"
 
 
-def run_eval_cli(config_path: str | None, out_root: str, quick: bool = False) -> int:
+def run_eval_cli(
+    config_path: str | None,
+    out_root: str,
+    quick: bool = False,
+    dqn_checkpoint: str | None = None,
+) -> int:
     """Entry point behind ``fonpr eval`` (S4.3)."""
     from fonpr.eval.report import write_report
 
@@ -208,7 +213,13 @@ def run_eval_cli(config_path: str | None, out_root: str, quick: bool = False) ->
     else:
         eval_cfg = EvalConfig()
 
-    results, timelines = evaluate(eval_cfg)
+    extra_policies = None
+    if dqn_checkpoint:
+        from fonpr.train import DQNPolicy
+
+        extra_policies = {"dqn": lambda _cfg: DQNPolicy(dqn_checkpoint)}
+
+    results, timelines = evaluate(eval_cfg, extra_policies=extra_policies)
     out_dir = write_report(results, timelines, eval_cfg, Path(out_root))
     logger.info("results written to %s", out_dir)
     return 0

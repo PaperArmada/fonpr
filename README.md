@@ -1,180 +1,52 @@
-# FONPR: First Open Network Pattern Reactors. Reinforcement Learning agents for fine tuning telecom networks.
+# FONPR
 
-## Quick Deployment 
-DQN agent deployment:
-```console
-kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_dqn_agent.yml
-```
-BBO agent deployment:
-```console
-kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_bbo_agent.yml
-```
-V0 agent deployment:
-```console
-kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_v0_agent.yml
-```
-Docker Repo: https://hub.docker.com/r/teamrespons/respons_agent/tags
+RL/control agents for **cost-minimal SLO compliance** of a cloud-native 5G
+core: observe the network (Advisor), frame the decision (Env), decide
+(Policy), act (Actuator).
 
-## First Open Network Pattern Reactors guide: 
-> This readme is intended to provide background on First Open Network Pattern Reactors and their deployment.
+- `docs/SPECS.md` — what is being built (the behavioral contract)
+- `CLAUDE.md` — how work is done here (invariant process rules)
+- `docs/adr/` — closed decisions (append-only)
 
-> Contents:
-> 1. Agent <br/>
-> 2. Advisor <br/>
-> 3. Action Handler <br/>
-> 4. Docker<br/>
-> 5. Agent Deployment <br/>
-> 6. Test Runbook <br/>
-
-## __1. Agent__
-An Agent is responsible for implementing a policy, i.e. mapping observed system state to desired control actions. The policy can be informed by subject matter experts, or learned independently by a reinforcement learning (RL) algorithm.
-
-**All agents currently ingest data via prometheus server, and take actions against a yml file that controls the target application.**
-
-**General usage:** 
-* Agent lives as a script in the agent.py file.  
-* The Agent script is run automatically on deployment in the network cluster as a containerized application, and executes its logic at regular intervals.
-* The Agent utilizes an Advisor function to set up a connection with the data source, and ingest data.
-* The Agent executes policy logic and updates cluster (Helm) configuration files in github via the Action Handler. 
-
-**V0 agent:**
-
-    Modify parameters in agent_v0.py for custom deployment
-
- * The primary functionality for the V0 agent is to use hueristics in order to update limits and requests for AMF. 
- * V0 agent allows for improved Kube-Scheduling. 
- * Inputs: Max CPU for AMF, Avg. CPU for AMF, Max Memory for AMF, Avg. Memory for AMF. 
- * Outputs: Update yml file limits and requests for AMF pods. 
-
-**BBO agent:**
-
-    Modify parameters in agent_bbo.py for custom deployment
-    
- * Google Vizier Library
- * BBO agent treats the system as a black box. It allows for efficient search of paremeters to optimize a function. It does not understand the function.
- * BBO is aware of X and Y of a function mapping via system: X->system->Y. 
- * The X are the paremters the BBO Agent can modify. 
- * The Y is the reward the BBO agent recieves after making its actions and allowing the actions to manifest in the system. 
- * The current algorithm underneath the BBO agent is Gaussian Process Optimization. 
- * Inputs BBO: Profit = SLO Price - Infra Cost
- * Ouputs BBO: UPF Node Sizing
-
-**DQN agent:** 
-
-    Modify parameters in agent_dqn.py for custom deployment
-
-
- * Tensorflow Library 
- * 7 x 20 x 20 x 2 Fully Connected Nueral Network.
- * Uses replay buffer for training.
- * DQN
-    * Inputs: Action, Observation, Reward, Discount, Next Step Type, Policy Info, Current Step Type. 
-    * Outputs: Q-Value (maximum expected reward) for taking a small sizing action or large sizing action. 
-* The agent itself outputs a modification of UPF Node Sizing 
-
-
-
-## __2. Advisor__
-An Advisor is responsible for connecting with a data source, ingesting data, and preprocessing / filtering that data prior to handing it off to the Agent.
-
-The Prometheus based advisor to send queries to a Prometheus server.
-
-To target the server, the ip address and port number can be found as follows:
-
-    ip:port found at
-    -  AWS → management console → EKS → clusters → resources tab → service and networking tab → endpoints → filter for Prometheus → Prometheus server endpoint
-
-
-## __3. Action Handler__
-An Action Handler is responsible for taking the requested cluster configuration updates (actions) and update the controlling configuration file accordingly.
-
-The current architecture leverages GitHub for revision control and housing of the cluster configuration files. When a config file is updated, it triggers redeployment of the network cluster via Flux.
-
-**PLEASE NOTE OUR SECRET IS NOT PUBLIC, PLS MODIFY WITH YOUR OWN SECRET MANAGEMENT STRATEGY**
-
-General usage:
-* The ActionHandler class takes in a GitHub token, the target file path within the repository, branch name, and a dictionary of agent-requested value updates.
-* The current version of the value file is fetched from GitHub, updated with the new values, and then pushed back to the repository, triggering a new cluster deployment.
-
-## __4. Docker__
-The Agent and its helper functions are containerized using Docker.
-
-Repo:https://hub.docker.com/r/teamrespons/respons_agent/tags
-
-* To pull docker image from registry:
-    
-    ```console
-    docker pull -t <imagename>:<version> . 
-    
-    # e.g.
-    docker pull -t teamrespons/respons_agent:v0.0 .
-    ```
-
-* To run docker image locally as a container:
-    ```console
-    docker run <imageid>
-    ```
-
-To create new images and contribute them:
-
-*  To Build docker image from an updated Dockerfile
-    
-    ```console
-    docker build -t teamrespons/respons_agent:<tagname> -f <dockerfile name> .  
-    
-    # e.g. 
-    docker build -t teamrespons/respons_agent:v0-agent -f Dockerfile_V0 .
-    ```
-* To run docker image locally as a container
-    ```console
-    docker run <imageid>
-    ```
-
-* To push docker image to dockerhub under the response-ml
-    ```console
-    docker push teamrespons/respons_agent:<tagname>
-    ```
-
-## __5. Agent Deployment__ 
-Pre-Requisites:
-1. Set up your machine with the following CLI tools:
-
-    AWS CLI
-
-    Kubectl
-
-    Helm
-    
-2. Set up your local AWS CLI Environment Variables for an account that has access to the EKS cluster:
-```console
-export AWS_ACCESS_KEY_ID=""
-export AWS_SECRET_ACCESS_KEY=""
-export AWS_SESSION_TOKEN=""
-```
-
-3. Update local kubectl config file:
+## Quickstart (simulation + evaluation)
 
 ```console
-aws eks --region <region> update-kubeconfig --name <clustername>
+pip install -e .[dev]        # core: sim, baselines, eval harness
+pytest                       # full test suite
+fonpr eval --quick           # smoke evaluation -> results/run-*/
+fonpr eval                   # full benchmark: 4 scenarios x 20 seeds
 ```
-Deployment:
-1. Update deployment/respons_agent_manifest.yml
 
-    Update in the yaml file to specify which image you want deployed into the cluster.
-        
-         "file image: teamrespons/respons_agent:version"
-        
-2. Agent deployments
+Train the DQN agent (optional `[rl]` extra; CPU is sufficient):
 
-    DQN agent deployment:
-    ```console
-    kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_dqn_agent.yml
-    ```
-    BBO agent deployment:
-    ```console
-    kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_bbo_agent.yml
-    ```
-    V0 agent deployment:
-    ```console
-    kubectl create -f https://raw.githubusercontent.com/DISHDevEx/fonpr/main/deployment/manifest_v0_agent.yml
-    ```
+```console
+pip install -e .[rl] --extra-index-url https://download.pytorch.org/whl/cpu
+fonpr train --steps 500000 --seed 0
+```
+
+Every result bundle carries its config, seeds, and git SHA
+(`run_meta.yaml`); result tables and plots are generated by `fonpr eval`
+and never hand-edited.
+
+## What this is
+
+The simulator (`fonpr/sim`) models the economics of sizing a 5G user-plane
+deployment: diurnal-plus-bursty offered load, instance capacity,
+transition lag with degraded capacity, transition double-billing, and an
+SLA-credit penalty for violated service levels. Baseline policies
+(threshold heuristic, reactive autoscaler-equivalent, seasonal-naive
+forecaster) and a hindsight-optimal oracle bound every claim about the
+learned agent: the acceptance bar is defined in `docs/SPECS.md` S4.4.
+
+The live environment (`fonpr/envs`, `fonpr/advisors`,
+`fonpr/action_handler`) targets a Prometheus-instrumented open5gs
+deployment controlled through GitOps, and is a deployment target only —
+nothing trains against live infrastructure.
+
+## Legacy (2023)
+
+The original tf-agents DQN, RLlib SAC, and Vizier BBO agents, with their
+Dockerfiles and manifests, are preserved verbatim in `archive/`
+(read-only; see ADR-0001/D8). The V0 heuristic agent and its deployment
+manifest remain under `fonpr/agent_v0.py` and `deployment/` pending their
+port onto the Policy/Actuator seams (tracked in `TODO.md`).

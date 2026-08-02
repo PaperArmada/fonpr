@@ -28,6 +28,11 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument(
         "--quick", action="store_true", help="Reduced seeds/episode length for smoke runs."
     )
+    eval_parser.add_argument(
+        "--dqn-checkpoint",
+        default=None,
+        help="Path to a trained DQN checkpoint to include as the 'dqn' policy.",
+    )
 
     train_parser = subparsers.add_parser(
         "train", help="Train the DQN agent in the simulator (S5; requires the [rl] extra)."
@@ -46,7 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "eval":
         from fonpr.eval.harness import run_eval_cli
 
-        return run_eval_cli(config_path=args.config, out_root=args.out, quick=args.quick)
+        return run_eval_cli(
+            config_path=args.config,
+            out_root=args.out,
+            quick=args.quick,
+            dqn_checkpoint=args.dqn_checkpoint,
+        )
     if args.command == "train":
         from fonpr.train import run_train_cli
 
