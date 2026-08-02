@@ -137,5 +137,6 @@ class FONPRSimEnv(gym.Env):
             "step_penalty_usd": float(penalty_usd),
             "offered_series": offered,
             "served_series": result.served,
+            "capacity_series": result.capacity,
             "action_applied": applied,
         }
