@@ -49,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     train_parser.add_argument("--out", default="runs", help="Output directory root.")
     train_parser.add_argument("--steps", type=int, default=500_000, help="Training steps.")
     train_parser.add_argument("--seed", type=int, default=0, help="Training seed.")
+    train_parser.add_argument(
+        "--algo", default="dqn", choices=["dqn", "ppo"], help="Training algorithm."
+    )
 
     trace_parser = subparsers.add_parser("trace", help="Trace utilities (S1.6).")
     trace_sub = trace_parser.add_subparsers(dest="trace_command", required=True)
@@ -79,7 +82,11 @@ def main(argv: list[str] | None = None) -> int:
         from fonpr.train import run_train_cli
 
         return run_train_cli(
-            config_path=args.config, out_root=args.out, steps=args.steps, seed=args.seed
+            config_path=args.config,
+            out_root=args.out,
+            steps=args.steps,
+            seed=args.seed,
+            algorithm=args.algo,
         )
     if args.command == "trace":
         from fonpr.sim.trace import pull_trace

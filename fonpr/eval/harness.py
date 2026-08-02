@@ -226,7 +226,9 @@ def run_eval_cli(
 
     extra_policies = None
     if dqn_checkpoint:
-        from fonpr.train import DQNPolicy
+        # AgentPolicy reads the algorithm from train_meta.yaml next to the
+        # checkpoint, so DQN and PPO checkpoints mix freely here.
+        from fonpr.train import AgentPolicy
 
         extra_policies = {}
         for spec in dqn_checkpoint:
@@ -235,7 +237,7 @@ def run_eval_cli(
             if label in extra_policies:
                 raise ValueError(f"duplicate policy label {label!r}")
             extra_policies[label] = (
-                lambda _cfg, p=path: DQNPolicy(p)  # bind path per iteration
+                lambda _cfg, p=path: AgentPolicy(p)  # bind path per iteration
             )
 
     results, timelines = evaluate(eval_cfg, extra_policies=extra_policies)
