@@ -405,3 +405,52 @@ the eval harness work unmodified.
 * **Why this exists**: cell-sleep / capacity-scaling energy saving is the
   industry's proven instance of this exact control problem; this section
   makes FONPR's twin speak its language natively.
+
+## S14. Pool Plant Variant — replica-count actions (ADR-0004)
+
+A homogeneous pool of small nodes where the action selects the **target
+node count** directly. Selected by the optional `plant.pool` config
+section (template `configs/sim-pool.yaml`); when absent, the binary
+two-tier plant (S1.3) is used unchanged, keeping every recorded benchmark
+reproducible.
+
+* **PoolConfig**: `node_type`, `node_capacity_bytes_per_sec`,
+  `min_nodes` >= 1, `max_nodes`, `initial_nodes`, `transition_lag_minutes`.
+  Defaults: t3.medium at 8e6 B/s, counts 1..8, initial 1, lag 5 min —
+  3 nodes match the legacy large tier's capacity, so D7 calibration holds.
+* **Action space**: `Discrete(max_nodes - min_nodes + 1)`; action `a`
+  means target count `min_nodes + a`. Choosing the current count is the
+  no-op (there is no separate NOOP action); `action_applied` is True only
+  when a resize actually starts.
+* **Transition semantics** (mirrors S1.3's economics): a resize from `n`
+  to `m` takes the lag; during it, capacity stays at the *old* count
+  (`n x c` — booting nodes are not ready; draining nodes still serve) and
+  billing covers `max(n, m)` nodes (booting nodes bill from launch;
+  draining nodes bill until drained). After the lag, capacity and billing
+  are `m`. Resize requests during a transition are ignored.
+* **Observation**: `(samples, 3)` float32 — [served throughput,
+  current_count / max_nodes, target_count / max_nodes] (the two count
+  columns are equal outside a transition). ADR-0002 time features append
+  as columns 3-4 exactly as in the binary variant.
+* **Costing**: single-sourced in `fonpr/sim/costing.py`. Price model:
+  `billed_count x hourly(node_type)`. Energy model (S13): serving nodes
+  share load evenly (`util = served / (active_count x c)`), each drawing
+  load-proportional power; transitional extra nodes idle.
+* **Baselines** (same names, so S4 reporting is variant-agnostic):
+  noop holds the initial count; threshold steps +/-1 on pool-utilization
+  hysteresis with patience and cooldown; reactive is the literal HPA
+  formula `ceil(throughput / (target_util x c))`; forecast sizes the
+  count to seasonal-naive forecast x margin.
+* **Oracle**: identical backward DP over the K count states with the
+  transition semantics above; the planned-vs-realized consistency
+  assertion (1e-6) applies unchanged.
+* **Harness**: `energy`-style switch — `pool: true` in the eval config /
+  `fonpr eval --pool`; composes with `--energy`. Scenario traffic, seeds,
+  and protocol are identical, but costs are NOT comparable to the binary
+  variant (different fleet economics): pool results compare only within
+  pool bundles.
+* **Hypothesis under test** (the reason this section exists): graded
+  actions turn cyclic scale-down into a chain of single-step deviations
+  with immediate reward. A 5-seed PPO campaign per S5 decides; if
+  learners still converge to max-provisioning, that negative result is
+  reported with equal prominence per S4.4.
