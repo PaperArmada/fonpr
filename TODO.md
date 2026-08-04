@@ -42,7 +42,12 @@ when scheduled.
   (Harvard Dataverse doi:10.7910/DVN/EGZHFV).
 - ~~MPC baseline (ADR-0005 rung 2; extends S3)~~ done (B4:
   `fonpr/policies/mpc.py`, S3 amendment, oracle-equivalence and
-  saturation-escape contract tests).
+  saturation-escape contract tests; rung-2 campaign recorded in
+  docs/benchmarks/2026-08-04-mpc-pool-*: learner separates from B4 on
+  the headline scenario). Follow-up: a burst-aware forecaster for B3/B4
+  (quantile or Holt-Winters upgrade, already named optional in S3) would
+  test whether a smarter deployable forecast closes the learner gap —
+  the strongest remaining rung-2 challenge.
 - Miscalibration-robustness campaign (ADR-0005 rung 3; extends S4):
   evaluate frozen policies under perturbed twins — capacity calibration
   (D7 ± 30%), transition lag, observation noise on the served-throughput

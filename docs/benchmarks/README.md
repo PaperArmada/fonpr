@@ -139,6 +139,45 @@ Three findings:
    the same axis — the energy column exists so that trade is measured, not
    asserted.
 
+## 2026-08-04 — B4 MPC baseline: the deployable ceiling measured, rung 2 cleared
+
+First bundles recorded on the local workstation (ADR-0005/C4: `run_meta.yaml`
+now carries the environment; the baseline and oracle rows are bit-identical
+to the 2026-08-02 cloud bundles, so cross-bundle comparison is exact).
+
+B4 (S3: B3's seasonal-naive forecaster feeding the oracle's step-cost DP
+over the twin's own cost model, receding 24 h horizon, B3's margin) ran
+under the full S4 pool protocol (`2026-08-04-mpc-pool-plain/`, 4 scenarios
+x 20 seeds) and the confirm60 protocol
+(`2026-08-04-mpc-pool-confirm60/`, diurnal_bursty x 60 seeds, identical
+traffic to `2026-08-02-campaign-pool-confirm60/`).
+
+Headline (diurnal_bursty, N=60): mpc 38.62 ± 1.53, forecast 38.66 ± 1.53,
+reactive 35.32 ± 1.17, oracle 17.36. Recorded PPO seeds on the same
+traffic: 33.01-34.20.
+
+1. **Rung 2 (ADR-0005) is cleared on the headline scenario.** Every PPO
+   training seed separates from B4 with non-overlapping unpaired 95% CIs
+   (worst PPO upper 35.19 vs mpc lower 37.09) — the strictest reading.
+   The learner is not merely beating autoscalers; it beats forecast-fed
+   DP planning over the twin's own economics.
+2. **Transition-aware scheduling is worth almost nothing in this plant.**
+   B4 tracks B3 everywhere: exactly the oracle on steady (14.31 — the
+   planner's sanity anchor), a 0.4% conservatism premium on clean diurnal
+   (15.97 vs 15.90: pricing violations against margined levels pre-scales
+   one step early), a wash on bursty and drift with slightly fewer
+   actions. With a 5-minute lag and cheap co-billing, *when* you resize
+   barely matters; what you can *foresee* does. The oracle's remaining
+   edge over every deployable policy is burst foresight, which is not
+   deployable.
+3. **The forecast family loses to plain reactive on burst-dominated
+   traffic** (B2 35.32 vs B3 38.66 / B4 38.62): reacting to actual load
+   beats replaying yesterday's bursts, which arrive as phantom forecasts
+   at the wrong steps. Against B2 the learner is better on the mean for
+   all five seeds but CI-clear for only one — the shared-seed variance
+   issue again; the paired-test protocol decision parked in `TODO.md`
+   would resolve it.
+
 ## 2026-08-02 — pool campaign (S14/ADR-0004): the learner beats the baselines
 
 The ADR-0004 hypothesis test: PPO x 5 training seeds x 2 observation
