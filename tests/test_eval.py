@@ -6,6 +6,7 @@ invariants, and the output bundle contract.
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from fonpr.eval import EvalConfig, evaluate, scenario_config
 from fonpr.eval.report import summarize, write_report
@@ -81,6 +82,13 @@ def test_report_bundle_contract(tmp_path, quick_results):
     assert (out_dir / "summary.csv").exists()
     assert (out_dir / "results.md").exists()
     assert (out_dir / "run_meta.yaml").exists()
+    # run_meta pins all three reproducibility legs: code (SHA), inputs
+    # (config), and environment (python + package versions) — S4.3.
+    with open(out_dir / "run_meta.yaml", encoding="utf-8") as fh:
+        meta = yaml.safe_load(fh)
+    assert set(meta) == {"git_sha", "generated_utc", "eval_config", "environment"}
+    assert meta["environment"]["python"]
+    assert meta["environment"]["packages"]["numpy"]
     for scenario in QUICK.scenarios:
         assert (out_dir / "plots" / f"cost_{scenario}.png").exists()
         assert (out_dir / "plots" / f"timeline_{scenario}.png").exists()

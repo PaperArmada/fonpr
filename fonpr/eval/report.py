@@ -11,6 +11,8 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import logging
+import platform
+from importlib import metadata
 from pathlib import Path
 
 import matplotlib
@@ -196,6 +198,35 @@ def write_markdown(summary: pd.DataFrame, results: pd.DataFrame, path: Path) -> 
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+# Distributions whose versions shape numeric results; absent ones are omitted.
+_ENVIRONMENT_DISTS = (
+    "numpy",
+    "pandas",
+    "gymnasium",
+    "PyYAML",
+    "matplotlib",
+    "stable-baselines3",
+    "torch",
+    "pyarrow",
+)
+
+
+def environment_versions() -> dict:
+    """Python and key package versions: the environment leg of reproducibility.
+
+    Seed + config + git SHA pin the code and inputs; this pins the third
+    input, the library stack, so bundles produced on different machines are
+    comparable (S4.3).
+    """
+    packages = {}
+    for dist in _ENVIRONMENT_DISTS:
+        try:
+            packages[dist] = metadata.version(dist)
+        except metadata.PackageNotFoundError:
+            continue
+    return {"python": platform.python_version(), "packages": packages}
+
+
 def write_report(results, timelines, eval_cfg, out_root: Path) -> Path:
     from fonpr.eval.harness import git_sha
 
@@ -222,6 +253,7 @@ def write_report(results, timelines, eval_cfg, out_root: Path) -> Path:
         "git_sha": git_sha(),
         "generated_utc": stamp,
         "eval_config": dataclasses.asdict(eval_cfg),
+        "environment": environment_versions(),
     }
     with open(out_dir / "run_meta.yaml", "w", encoding="utf-8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
