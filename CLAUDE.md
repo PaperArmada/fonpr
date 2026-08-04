@@ -63,5 +63,5 @@ canonical module; do not introduce a second pattern:
 ## Definition of done
 
 Code + tests + spec conformance + `ruff` clean + CI green. A feature without
-tests does not exist. A result without a seed, config, and git SHA attached
-does not exist.
+tests does not exist. A result without a seed, config, git SHA, and
+environment (package versions, ADR-0005) attached does not exist.

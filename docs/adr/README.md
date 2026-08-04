@@ -13,3 +13,4 @@ New ADRs: copy `0000-template.md` to the next number, keep it under a page.
 | [0002](0002-time-of-day-observation.md) | Optional time-of-day observation features | Accepted |
 | [0003](0003-ppo-default-algorithm.md) | PPO replaces DQN as the default training algorithm | Accepted (supersedes 0001/D2) |
 | [0004](0004-replica-count-action-space.md) | Replica-count action space (pool plant v2) | Accepted |
+| [0005](0005-research-charter.md) | Research charter: twin-first evaluation of RL for telco operations | Accepted |

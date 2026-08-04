@@ -22,8 +22,9 @@ when scheduled.
   Discrete(3) action space is the limit and prioritize roadmap Phase 5.
 - ~~Energy scenario family in the eval harness~~ done (`fonpr eval
   --energy`; first watt-denominated benchmark recorded in
-  docs/benchmarks/2026-08-02-energy-baselines/). Follow-up: re-run after
-  the lab rig replaces placeholder watts with measured draw.
+  docs/benchmarks/2026-08-02-energy-baselines/). Follow-up (parked per
+  ADR-0005/C3, rung 5): re-run after a lab rig replaces placeholder watts
+  with measured draw.
 - ~~ADR-0004 replica-count action space~~ accepted, implemented (S14),
   and hypothesis-tested (docs/benchmarks/2026-08-02-campaign-pool-*).
   Open follow-ups: (a) owner decision on whether S4.4 should specify the
@@ -32,13 +33,30 @@ when scheduled.
   cyclic scale-down on clean diurnal even with a clock and graded
   actions; (c) pool + energy (--pool --energy) campaign = the cell-sleep
   setting proper.
-- Milan (Telecom Italia Big Data Challenge) trace converter:
-  `fonpr trace convert-milan` — aggregate cell clusters (business,
-  residential, citywide, event-day), interpolate 10-min source to tick
-  granularity, scale peak to capacity calibration, emit trace-schema
-  Parquet with train/eval week split; ODbL attribution note.
-- S9 local stack (`make local-stack`): needs a Docker-capable machine;
-  build and verify there rather than committing an untested Makefile.
+- ~~Milan (Telecom Italia Big Data Challenge) trace converter~~ done
+  (S1.6: `fonpr trace convert-milan`, ODbL attribution, tests). Follow-up
+  is the recorded campaign below.
+- Milan trace campaign (ADR-0005 rung 4): run the S4 protocol over
+  converted Milan traces (business, residential, citywide clusters) and
+  commit the first real-demand benchmark bundle. Requires the source TSVs
+  (Harvard Dataverse doi:10.7910/DVN/EGZHFV).
+- MPC baseline (ADR-0005 rung 2; extends S3): causal model-predictive
+  control — seasonal-naive forecast feeding the oracle's DP over the twin
+  plant, receding horizon. The strongest deployable non-RL competitor; the
+  learner's oracle-gap capture is only meaningful relative to it. Spec
+  section lands with the implementation.
+- Miscalibration-robustness campaign (ADR-0005 rung 3; extends S4):
+  evaluate frozen policies under perturbed twins — capacity calibration
+  (D7 ± 30%), transition lag, observation noise on the served-throughput
+  channel — and report ranking stability, not just point costs. Spec
+  section lands with the implementation.
+- S9 local stack (`make local-stack`): parked per ADR-0005/C3
+  (simulation-first; hardware waits for rung 4). Machine notes from the
+  2026-08-04 viability probe: WSL2 box has Docker 29.x, 31 GB RAM, TUN
+  present; blockers logged were cgroup v1, no kind/helm, and the
+  EKS-specific `node_sizing_query` in `prom_queries.py` that can never
+  return non-empty on kind (S9 verify-gate conflict needing an owner
+  call when unparked).
 - S12 live-loop actuation mapping for pool actions (S14): translate a
   target node count to a replicaCount/ASG-size actuation request; the
   current mapping only covers binary LARGE/SMALL nodeSelector swaps.

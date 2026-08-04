@@ -19,8 +19,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # Learned agent (S5). Kept optional: torch is heavy and the sim/eval/baseline
-# stack must stay installable without it.
-rl = ["stable-baselines3>=2.3"]
+# stack must stay installable without it. torch is named explicitly (it is
+# already transitive via SB3) so the CPU wheel index below can pin it.
+rl = ["stable-baselines3>=2.3", "torch>=2.3"]
 # Live-cluster loop: advisor, action handler, AWS secrets backend.
 live = [
     "prometheus-api-client>=0.5.3",
@@ -37,6 +38,17 @@ fonpr = "fonpr.cli:main"
 [tool.setuptools.packages.find]
 include = ["fonpr*"]
 exclude = ["archive*", "tests*", "deployment*"]
+
+# uv manages environments and the committed uv.lock (ADR-0005). CPU torch:
+# training is MLP-scale and recorded campaigns were CPU-trained; the CUDA
+# stack adds gigabytes for no reproducibility benefit.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
 
 [tool.ruff]
 line-length = 100
