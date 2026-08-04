@@ -55,13 +55,31 @@ def _ci95(series: pd.Series) -> float:
 
 
 def summarize(results: pd.DataFrame) -> pd.DataFrame:
-    """Mean and 95% CI per scenario x policy for the reported metrics."""
-    grouped = results.groupby(["scenario", "policy"])
+    """Mean and 95% CI per scenario (x robustness cell) x policy."""
+    keys = ["scenario", "perturb", "policy"] if "perturb" in results else ["scenario", "policy"]
+    grouped = results.groupby(keys)
     parts = {}
     for metric in (*METRIC_LABELS, ENERGY_METRIC):
         parts[f"{metric}_mean"] = grouped[metric].mean()
         parts[f"{metric}_ci95"] = grouped[metric].apply(_ci95)
     return pd.DataFrame(parts).reset_index()
+
+
+def _sections(summary: pd.DataFrame) -> list[tuple[str, str, pd.DataFrame]]:
+    """(display key, heading, rows) per scenario (x cell), in frame order."""
+    out = []
+    if "perturb" in summary:
+        pairs = summary[["scenario", "perturb"]].drop_duplicates().itertuples(index=False)
+        for scenario, perturb in pairs:
+            rows = summary[(summary.scenario == scenario) & (summary.perturb == perturb)]
+            display = scenario if not perturb else f"{scenario}__{perturb}"
+            heading = scenario if not perturb else f"{scenario} · cell: {perturb}"
+            out.append((display, heading, rows))
+    else:
+        for scenario in summary.scenario.unique():
+            rows = summary[summary.scenario == scenario]
+            out.append((scenario, scenario, rows))
+    return out
 
 
 def _policy_order(policies: list[str]) -> list[str]:
@@ -70,8 +88,8 @@ def _policy_order(policies: list[str]) -> list[str]:
     return known + rest + (["oracle"] if "oracle" in policies else [])
 
 
-def plot_cost_by_policy(summary: pd.DataFrame, scenario: str, path: Path) -> None:
-    data = summary[summary.scenario == scenario]
+def plot_cost_by_policy(data: pd.DataFrame, scenario: str, path: Path) -> None:
+    """``data``: one section's summary rows; ``scenario``: its display key."""
     order = [p for p in _policy_order(list(data.policy)) if p != "oracle"]
     rows = data.set_index("policy").loc[order]
     oracle = data[data.policy == "oracle"]
@@ -168,10 +186,9 @@ def write_markdown(summary: pd.DataFrame, results: pd.DataFrame, path: Path) -> 
         "",
     ]
     show_energy = bool((results[ENERGY_METRIC].abs() > 0).any())
-    for scenario in summary.scenario.unique():
-        data = summary[summary.scenario == scenario]
+    for _display, heading, data in _sections(summary):
         order = _policy_order(list(data.policy))
-        lines += [f"## {scenario}", ""]
+        lines += [f"## {heading}", ""]
         header = "| Policy | Total cost ($) | SLO violation (min) | Actions | Regret ($) |"
         rule = "|---|---|---|---|---|"
         if show_energy:
@@ -243,11 +260,12 @@ def write_report(results, timelines, eval_cfg, out_root: Path) -> Path:
 
     from fonpr.eval.harness import scenario_config
 
-    for scenario in results.scenario.unique():
-        plot_cost_by_policy(summary, scenario, plots_dir / f"cost_{scenario}.png")
+    for display, _heading, data in _sections(summary):
+        plot_cost_by_policy(data, display, plots_dir / f"cost_{display}.png")
+        scenario = display.split("__", 1)[0]
         tick = scenario_config(scenario, eval_cfg.episode_days).time.tick_minutes
         plot_timelines(
-            timelines.get(scenario, {}), scenario, tick, plots_dir / f"timeline_{scenario}.png"
+            timelines.get(display, {}), display, tick, plots_dir / f"timeline_{display}.png"
         )
 
     meta = {

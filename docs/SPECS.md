@@ -222,6 +222,25 @@ total operating cost with non-overlapping confidence intervals on the
 `diurnal+bursty` scenario. If B3 wins, that result is reported with equal
 prominence — a negative finding is a valid outcome of this work.
 
+### S4.5 Robustness protocol (ADR-0005 rung 3)
+
+* Optional `perturbations` map in the eval config: filename-safe label →
+  cell `{capacity_scale, lag_scale, obs_noise_sigma_frac}`. Absent, the
+  S4.2 protocol runs unchanged (bit-identical output).
+* **Belief/world split**: policies are constructed from (and checkpoints
+  carry) the nominal scenario config; the env and the oracle run the
+  perturbed world. Regret is against the world's oracle — what was truly
+  achievable.
+* Observation noise is multiplicative iid gaussian on the served-throughput
+  column only, applied between world and policy, seeded deterministically
+  from the eval seed and a stable digest of the policy name. Fleet-state
+  columns stay exact (an operator knows its own fleet); the oracle sees no
+  observation noise.
+* Reporting: results carry a `perturb` column; one table and plot set per
+  (scenario, cell). The rung-3 claim is **ranking stability** — the
+  learner-vs-baseline ordering surviving the cells — not point costs,
+  which are not comparable across cells (different worlds).
+
 ---
 
 ## S5. Learned Agent

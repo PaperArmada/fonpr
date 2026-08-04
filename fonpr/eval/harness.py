@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import subprocess
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,27 @@ HEADLINE_SCENARIO = "diurnal_bursty"
 
 
 @dataclass(frozen=True)
+class PerturbConfig:
+    """One robustness cell (S4.5, ADR-0005 rung 3): how the evaluation
+    world differs from the nominal twin the policies believe in."""
+
+    # Multiplies the world plant's capacities (both tiers / node capacity).
+    capacity_scale: float = 1.0
+    # Multiplies the world plant's transition lag.
+    lag_scale: float = 1.0
+    # Multiplicative iid gaussian on the observed served-throughput column
+    # only, between world and policy. Fleet-state columns stay exact: an
+    # operator knows its own fleet.
+    obs_noise_sigma_frac: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.capacity_scale <= 0 or self.lag_scale <= 0:
+            raise ValueError("capacity_scale and lag_scale must be positive")
+        if self.obs_noise_sigma_frac < 0:
+            raise ValueError("obs_noise_sigma_frac must be non-negative")
+
+
+@dataclass(frozen=True)
 class EvalConfig:
     """Harness parameters (S4.2). Scenario definitions live in scenario_config."""
 
@@ -51,6 +74,9 @@ class EvalConfig:
     # S14/ADR-0004: run the pool plant (PoolConfig defaults, matching
     # configs/sim-pool.yaml). Pool costs compare only within pool bundles.
     pool: bool = False
+    # S4.5 (ADR-0005 rung 3): label -> robustness cell. None runs the S4.2
+    # protocol unchanged. Labels are filename-safe ([A-Za-z0-9_-]).
+    perturbations: dict[str, PerturbConfig] | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> EvalConfig:
@@ -62,6 +88,19 @@ class EvalConfig:
             raise KeyError(f"eval config: unknown key(s) {sorted(unknown)}")
         if "scenarios" in raw:
             raw["scenarios"] = tuple(raw["scenarios"])
+        if raw.get("perturbations") is not None:
+            cells = {}
+            for label, cell in raw["perturbations"].items():
+                if not re.fullmatch(r"[A-Za-z0-9_-]+", label):
+                    raise ValueError(f"perturbation label {label!r} is not filename-safe")
+                cell_known = {f.name for f in dataclasses.fields(PerturbConfig)}
+                cell_unknown = set(cell or {}) - cell_known
+                if cell_unknown:
+                    raise KeyError(
+                        f"perturbation {label!r}: unknown key(s) {sorted(cell_unknown)}"
+                    )
+                cells[label] = PerturbConfig(**(cell or {}))
+            raw["perturbations"] = cells
         return cls(**raw)
 
 
@@ -90,6 +129,64 @@ def scenario_config(
     return SimConfig(time=time, traffic=traffic, plant=plant, econ=econ)
 
 
+def perturbed_world(belief: SimConfig, cell: PerturbConfig) -> SimConfig:
+    """The evaluation world for one robustness cell (S4.5).
+
+    Policies keep their beliefs (thresholds, forecasts, MPC's internal cost
+    model, a checkpoint's weights) from the nominal config; only the world
+    the env and the oracle run changes. Lag stays integer-typed, rounded.
+    """
+    plant = belief.plant
+    if plant.pool is not None:
+        pool = dataclasses.replace(
+            plant.pool,
+            node_capacity_bytes_per_sec=(
+                plant.pool.node_capacity_bytes_per_sec * cell.capacity_scale
+            ),
+            transition_lag_minutes=max(
+                1, round(plant.pool.transition_lag_minutes * cell.lag_scale)
+            ),
+        )
+        plant = dataclasses.replace(plant, pool=pool)
+    else:
+        plant = dataclasses.replace(
+            plant,
+            small_capacity_bytes_per_sec=(
+                plant.small_capacity_bytes_per_sec * cell.capacity_scale
+            ),
+            large_capacity_bytes_per_sec=(
+                plant.large_capacity_bytes_per_sec * cell.capacity_scale
+            ),
+            transition_lag_minutes=max(
+                1, round(plant.transition_lag_minutes * cell.lag_scale)
+            ),
+        )
+    return dataclasses.replace(belief, plant=plant)
+
+
+class _NoisyObsPolicy(Policy):
+    """Sensor error between world and controller (S4.5): multiplicative iid
+    gaussian on the served-throughput column, deterministic per (eval seed,
+    policy name) via a stable digest — never the process hash seed."""
+
+    def __init__(self, inner: Policy, sigma_frac: float, seed: int):
+        self._inner = inner
+        self.name = inner.name
+        self._sigma = sigma_frac
+        self._seed_key = [seed, zlib.crc32(inner.name.encode("utf-8"))]
+        self.reset()
+
+    def reset(self) -> None:
+        self._inner.reset()
+        self._rng = np.random.default_rng(self._seed_key)
+
+    def act(self, obs: np.ndarray) -> int:
+        noisy = obs.copy()
+        factors = 1.0 + self._rng.normal(0.0, self._sigma, size=len(noisy))
+        noisy[:, 0] = np.maximum(noisy[:, 0] * factors, 0.0).astype(obs.dtype)
+        return self._inner.act(noisy)
+
+
 @dataclass
 class EpisodeRecord:
     scenario: str
@@ -98,6 +195,7 @@ class EpisodeRecord:
     metrics: dict[str, float]
     # Per-tick series for the timeline plot (kept only for seed index 0).
     series: dict[str, np.ndarray] | None = None
+    perturb: str = ""  # robustness-cell label; empty under the S4.2 protocol
 
 
 def run_episode(
@@ -158,60 +256,95 @@ def evaluate(
     """
     records: list[EpisodeRecord] = []
     timelines: dict[str, dict[str, dict[str, np.ndarray]]] = {}
+    # No perturbations: one unlabeled cell, the S4.2 protocol unchanged.
+    cells: dict[str, PerturbConfig | None] = (
+        dict(eval_cfg.perturbations) if eval_cfg.perturbations else {"": None}
+    )
 
     for scenario in eval_cfg.scenarios:
-        sim_cfg = scenario_config(
+        belief_cfg = scenario_config(
             scenario,
             eval_cfg.episode_days,
             eval_cfg.include_time_features,
             eval_cfg.energy,
             eval_cfg.pool,
         )
-        env = FONPRSimEnv(sim_cfg)
-        timelines[scenario] = {}
-
-        for i in range(eval_cfg.n_seeds):
-            seed = eval_cfg.seed_offset + i
-            keep = i == 0
-            policies: list[Policy] = make_baselines(sim_cfg)
-            for name, factory in (extra_policies or {}).items():
-                p = factory(sim_cfg)
-                p.name = name
-                policies.append(p)
-
-            offered_steps: list[np.ndarray] | None = None
-            oracle_cost: float | None = None
-            seed_records: list[EpisodeRecord] = []
-
-            for policy in policies:
-                metrics, offered, series = run_episode(env, policy, seed, keep_series=keep)
-                offered_steps = offered_steps or offered
-                seed_records.append(
-                    EpisodeRecord(scenario, policy.name, seed, metrics, series)
-                )
-
-            # Oracle on the identical offered-load trace (traffic is
-            # action-independent, so any policy's trace is THE trace).
-            actions, planned = plan_oracle_actions(offered_steps, sim_cfg)
-            metrics, _, series = run_episode(
-                env, OraclePolicy(actions), seed, keep_series=keep
+        for cell_label, cell in cells.items():
+            world_cfg = (
+                belief_cfg if cell is None else perturbed_world(belief_cfg, cell)
             )
-            oracle_cost = metrics["total_cost_usd"]
-            if abs(planned - oracle_cost) > 1e-6:
-                raise AssertionError(
-                    f"oracle DP/plant divergence: planned {planned}, realized {oracle_cost}"
-                )
-            seed_records.append(EpisodeRecord(scenario, "oracle", seed, metrics, series))
+            env = FONPRSimEnv(world_cfg)
+            display = scenario if not cell_label else f"{scenario}__{cell_label}"
+            timelines[display] = {}
 
-            for rec in seed_records:
-                rec.metrics["regret_usd"] = rec.metrics["total_cost_usd"] - oracle_cost
-                records.append(rec)
-                if keep and rec.series is not None:
-                    timelines[scenario][rec.policy] = rec.series
-            logger.info("scenario=%s seed=%d done", scenario, seed)
+            for i in range(eval_cfg.n_seeds):
+                seed = eval_cfg.seed_offset + i
+                keep = i == 0
+                # Policies believe the nominal twin (S4.5); only the world
+                # they are dropped into changes.
+                policies: list[Policy] = make_baselines(belief_cfg)
+                for name, factory in (extra_policies or {}).items():
+                    p = factory(belief_cfg)
+                    p.name = name
+                    policies.append(p)
+                if cell is not None and cell.obs_noise_sigma_frac > 0:
+                    policies = [
+                        _NoisyObsPolicy(p, cell.obs_noise_sigma_frac, seed)
+                        for p in policies
+                    ]
+
+                offered_steps: list[np.ndarray] | None = None
+                oracle_cost: float | None = None
+                seed_records: list[EpisodeRecord] = []
+
+                for policy in policies:
+                    metrics, offered, series = run_episode(
+                        env, policy, seed, keep_series=keep
+                    )
+                    offered_steps = offered_steps or offered
+                    seed_records.append(
+                        EpisodeRecord(
+                            scenario, policy.name, seed, metrics, series, cell_label
+                        )
+                    )
+
+                # Oracle on the identical offered-load trace (traffic is
+                # action-independent, so any policy's trace is THE trace).
+                # It plans on the WORLD: regret is against what was truly
+                # achievable, and it sees no observation noise (S4.5).
+                actions, planned = plan_oracle_actions(offered_steps, world_cfg)
+                metrics, _, series = run_episode(
+                    env, OraclePolicy(actions), seed, keep_series=keep
+                )
+                oracle_cost = metrics["total_cost_usd"]
+                if abs(planned - oracle_cost) > 1e-6:
+                    raise AssertionError(
+                        f"oracle DP/plant divergence: planned {planned}, realized {oracle_cost}"
+                    )
+                seed_records.append(
+                    EpisodeRecord(scenario, "oracle", seed, metrics, series, cell_label)
+                )
+
+                for rec in seed_records:
+                    rec.metrics["regret_usd"] = rec.metrics["total_cost_usd"] - oracle_cost
+                    records.append(rec)
+                    if keep and rec.series is not None:
+                        timelines[display][rec.policy] = rec.series
+                logger.info(
+                    "scenario=%s%s seed=%d done",
+                    scenario,
+                    f" cell={cell_label}" if cell_label else "",
+                    seed,
+                )
 
     rows = [
-        {"scenario": r.scenario, "policy": r.policy, "seed": r.seed, **r.metrics}
+        {
+            "scenario": r.scenario,
+            "perturb": r.perturb,
+            "policy": r.policy,
+            "seed": r.seed,
+            **r.metrics,
+        }
         for r in records
     ]
     return pd.DataFrame(rows), timelines
