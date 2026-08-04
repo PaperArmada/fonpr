@@ -9,6 +9,7 @@ import pytest
 from fonpr.eval import EvalConfig, evaluate, scenario_config
 from fonpr.policies import (
     ForecastPoolPolicy,
+    MpcPoolPolicy,
     NoopPoolPolicy,
     ReactivePoolPolicy,
     ThresholdPoolPolicy,
@@ -172,8 +173,15 @@ class TestPoolBaselines:
             ThresholdPoolPolicy,
             ReactivePoolPolicy,
             ForecastPoolPolicy,
+            MpcPoolPolicy,
         ]
-        assert [p.name for p in policies] == ["noop", "threshold", "reactive", "forecast"]
+        assert [p.name for p in policies] == [
+            "noop",
+            "threshold",
+            "reactive",
+            "forecast",
+            "mpc",
+        ]
 
     def test_noop_holds_current_count(self):
         policy = NoopPoolPolicy(pool_sim())

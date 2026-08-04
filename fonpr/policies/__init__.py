@@ -20,11 +20,14 @@ from fonpr.policies.baselines import (
     ThresholdPoolPolicy,
     make_baselines,
 )
+from fonpr.policies.mpc import MpcPolicy, MpcPoolPolicy
 from fonpr.policies.oracle import OraclePolicy, plan_oracle_actions
 
 __all__ = [
     "ForecastPolicy",
     "ForecastPoolPolicy",
+    "MpcPolicy",
+    "MpcPoolPolicy",
     "NoopPolicy",
     "NoopPoolPolicy",
     "OraclePolicy",

@@ -160,7 +160,19 @@ harness — the RL agent is judged only relative to them.
    horizon = same time yesterday) with optional Holt-Winters upgrade;
    choose the cheapest instance whose capacity covers the forecast × safety
    margin (default 1.15).
-5. **Oracle (upper bound)**: hindsight-optimal sizing computed on the full
+5. **B4 — Model-predictive control** (ADR-0005 rung 2): B3's seasonal-naive
+   forecaster feeding the oracle's step-cost DP over the twin's own cost
+   model, on a receding horizon (default 24 h), with B3's safety margin.
+   The strongest deployable non-RL competitor: B4 − B3 isolates the value
+   of transition-aware multi-step scheduling, oracle − B4 the value of
+   perfect foresight. Given exact forecasts, unit margin, and a horizon
+   covering the remaining episode, B4 reproduces the oracle exactly
+   (contract-tested). The margin doubles as the saturation-escape
+   mechanism, exactly as in B3: served-history forecasts are
+   self-fulfilling under saturation, and margin > 1 is what breaks the
+   trap (contract-tested). Rung-2 claims (learner vs MPC) cite this
+   baseline.
+6. **Oracle (upper bound)**: hindsight-optimal sizing computed on the full
    episode trace via dynamic programming over the 3-action space, including
    transition costs. Used for regret; never presented as a deployable policy.
 

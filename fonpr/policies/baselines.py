@@ -19,6 +19,7 @@ from fonpr.policies.base import (
     observed_throughput,
     pool_in_transition,
 )
+from fonpr.policies.mpc import MpcPolicy, MpcPoolPolicy
 from fonpr.sim.config import PoolConfig, SimConfig
 from fonpr.sim.env import ACTION_LARGE, ACTION_NOOP, ACTION_SMALL
 
@@ -278,10 +279,12 @@ def make_baselines(config: SimConfig) -> list[Policy]:
             ThresholdPoolPolicy(config),
             ReactivePoolPolicy(config),
             ForecastPoolPolicy(config),
+            MpcPoolPolicy(config),
         ]
     return [
         NoopPolicy(),
         ThresholdPolicy(config),
         ReactivePolicy(config),
         ForecastPolicy(config),
+        MpcPolicy(config),
     ]

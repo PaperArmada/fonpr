@@ -31,6 +31,7 @@ POLICY_COLORS = {
     "threshold": "#eb6834",
     "reactive": "#1baf7a",
     "forecast": "#eda100",
+    "mpc": "#12999e",
     "dqn": "#e87ba4",
 }
 ORACLE_COLOR = "#6f6e69"  # neutral: a bound, not a contender

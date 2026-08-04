@@ -40,11 +40,9 @@ when scheduled.
   converted Milan traces (business, residential, citywide clusters) and
   commit the first real-demand benchmark bundle. Requires the source TSVs
   (Harvard Dataverse doi:10.7910/DVN/EGZHFV).
-- MPC baseline (ADR-0005 rung 2; extends S3): causal model-predictive
-  control — seasonal-naive forecast feeding the oracle's DP over the twin
-  plant, receding horizon. The strongest deployable non-RL competitor; the
-  learner's oracle-gap capture is only meaningful relative to it. Spec
-  section lands with the implementation.
+- ~~MPC baseline (ADR-0005 rung 2; extends S3)~~ done (B4:
+  `fonpr/policies/mpc.py`, S3 amendment, oracle-equivalence and
+  saturation-escape contract tests).
 - Miscalibration-robustness campaign (ADR-0005 rung 3; extends S4):
   evaluate frozen policies under perturbed twins — capacity calibration
   (D7 ± 30%), transition lag, observation noise on the served-throughput

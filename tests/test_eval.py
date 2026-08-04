@@ -27,9 +27,16 @@ def energy_results():
 
 def test_grid_shape(quick_results):
     results, timelines = quick_results
-    # 4 baselines + oracle, per scenario, per seed.
-    assert len(results) == 2 * 2 * 5
-    assert set(results.policy) == {"noop", "threshold", "reactive", "forecast", "oracle"}
+    # 5 baselines (B0-B4) + oracle, per scenario, per seed.
+    assert len(results) == 2 * 2 * 6
+    assert set(results.policy) == {
+        "noop",
+        "threshold",
+        "reactive",
+        "forecast",
+        "mpc",
+        "oracle",
+    }
     assert set(timelines) == {"steady", "diurnal_bursty"}
     for scenario_lines in timelines.values():
         for series in scenario_lines.values():
@@ -63,7 +70,7 @@ def test_summarize_layout(quick_results):
     assert {"scenario", "policy", "total_cost_usd_mean", "total_cost_usd_ci95"} <= set(
         summary.columns
     )
-    assert len(summary) == 2 * 5
+    assert len(summary) == 2 * 6
 
 
 def test_scenario_configs_differ():

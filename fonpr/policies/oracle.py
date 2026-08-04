@@ -15,7 +15,7 @@ from fonpr.sim.env import ACTION_LARGE, ACTION_NOOP, ACTION_SMALL
 _STATES = ("small", "large")
 
 
-def _step_cost(
+def step_cost(
     config: SimConfig, state: str, target: str, offered: np.ndarray
 ) -> float:
     """Infra cost + SLO penalty for one step starting in ``state``.
@@ -73,10 +73,10 @@ def _step_cost(
     return infra + violation_minutes * econ.penalty_per_violation_minute_usd
 
 
-def _pool_step_cost(
+def pool_step_cost(
     config: SimConfig, state: int, target: int, offered: np.ndarray
 ) -> float:
-    """Pool-variant (S14) counterpart of :func:`_step_cost` over node counts.
+    """Pool-variant (S14) counterpart of :func:`step_cost` over node counts.
 
     Mirrors PoolPlantModel: during the lag, capacity stays at the old
     count while max(state, target) nodes bill.
@@ -119,12 +119,14 @@ def _pool_step_cost(
 
 
 def _plan_pool(
-    offered_steps: list[np.ndarray], config: SimConfig
+    offered_steps: list[np.ndarray], config: SimConfig, initial_count: int | None = None
 ) -> tuple[list[int], float]:
     """Backward DP over the K node-count states (S14)."""
     pool = config.plant.pool
     states = range(pool.min_nodes, pool.max_nodes + 1)
-    start = pool.initial_nodes
+    start = pool.initial_nodes if initial_count is None else initial_count
+    if not pool.min_nodes <= start <= pool.max_nodes:
+        raise ValueError(f"initial count {start} outside [{pool.min_nodes}, {pool.max_nodes}]")
     n_steps = len(offered_steps)
     value = {s: 0.0 for s in states}
     best_target: list[dict[int, int]] = [{} for _ in range(n_steps)]
@@ -134,7 +136,7 @@ def _plan_pool(
         for state in states:
             best = None
             for target in states:
-                cost = _pool_step_cost(config, state, target, offered_steps[t])
+                cost = pool_step_cost(config, state, target, offered_steps[t])
                 cost += value[target]
                 if best is None or cost < best[0]:
                     best = (cost, target)
@@ -152,19 +154,22 @@ def _plan_pool(
 
 
 def plan_oracle_actions(
-    offered_steps: list[np.ndarray], config: SimConfig, initial_state: str | None = None
+    offered_steps: list[np.ndarray],
+    config: SimConfig,
+    initial_state: str | int | None = None,
 ) -> tuple[list[int], float]:
     """Backward-DP over per-step offered-load arrays.
 
     Returns (actions, optimal_total_cost) starting from ``initial_state``
-    (defaults to the plant's configured initial instance). In the pool
-    variant (S14) the DP runs over node counts and ``initial_state`` must
-    be left unset.
+    (defaults to the plant's configured initial state). Binary plant:
+    'small' | 'large'. Pool variant (S14): an integer node count.
     """
     if config.plant.pool is not None:
-        if initial_state is not None:
-            raise ValueError("initial_state is a binary-plant parameter (S14)")
-        return _plan_pool(offered_steps, config)
+        if initial_state is not None and not isinstance(initial_state, int):
+            raise ValueError("pool variant (S14) takes an integer node count")
+        return _plan_pool(offered_steps, config, initial_count=initial_state)
+    if initial_state is not None and not isinstance(initial_state, str):
+        raise ValueError("binary plant takes 'small' or 'large'")
     start = initial_state or config.plant.initial_instance
     n_steps = len(offered_steps)
     # value[s] = minimal cost-to-go from state s at the current step boundary.
@@ -176,7 +181,7 @@ def plan_oracle_actions(
         for state in _STATES:
             best = None
             for target in _STATES:
-                cost = _step_cost(config, state, target, offered_steps[t]) + value[target]
+                cost = step_cost(config, state, target, offered_steps[t]) + value[target]
                 if best is None or cost < best[0]:
                     best = (cost, target)
             new_value[state] = best[0]
@@ -215,4 +220,4 @@ class OraclePolicy(Policy):
         return action
 
 
-__all__ = ["OraclePolicy", "plan_oracle_actions"]
+__all__ = ["OraclePolicy", "plan_oracle_actions", "pool_step_cost", "step_cost"]
