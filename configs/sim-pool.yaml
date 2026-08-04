@@ -6,7 +6,10 @@
 plant:
   pool:
     node_type: t3.medium
-    node_capacity_bytes_per_sec: 8.0e6
+    # YAML 1.1: scientific notation requires the signed exponent (8.0e6
+    # parses as a string; loadability of every template is pinned by
+    # tests/test_sim_config.py).
+    node_capacity_bytes_per_sec: 8.0e+6
     min_nodes: 1
     max_nodes: 8
     initial_nodes: 1

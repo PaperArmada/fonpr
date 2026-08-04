@@ -3,6 +3,7 @@ Tests for the sim config (S1.5): defaults, validation, strict YAML loading.
 """
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -67,3 +68,17 @@ def test_missing_pricing_entry_fails_fast():
 
     with pytest.raises(KeyError):
         SimConfig(plant=PlantConfig(large_instance_type="m5.24xlarge"))
+
+
+def test_committed_sim_templates_load():
+    """Every committed sim config template must load through the strict
+    loader with numeric fields as numbers. Regression: YAML 1.1 parses an
+    unsigned exponent (8.0e6) as a *string*, which shipped unloadable in
+    sim-pool.yaml and only surfaced when `fonpr train --config` first ran."""
+    root = Path(__file__).parents[1] / "configs"
+    pool_cfg = SimConfig.from_yaml(root / "sim-pool.yaml")
+    assert pool_cfg.plant.pool is not None
+    assert pool_cfg.plant.pool.node_capacity_bytes_per_sec == 8.0e6
+    energy_cfg = SimConfig.from_yaml(root / "sim-energy.yaml")
+    assert energy_cfg.econ.power is not None
+    assert energy_cfg.econ.power.electricity_usd_per_kwh > 0
