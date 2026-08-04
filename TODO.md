@@ -48,11 +48,17 @@ when scheduled.
   (quantile or Holt-Winters upgrade, already named optional in S3) would
   test whether a smarter deployable forecast closes the learner gap —
   the strongest remaining rung-2 challenge.
-- Miscalibration-robustness campaign (ADR-0005 rung 3; extends S4):
-  evaluate frozen policies under perturbed twins — capacity calibration
-  (D7 ± 30%), transition lag, observation noise on the served-throughput
-  channel — and report ranking stability, not just point costs. Spec
-  section lands with the implementation.
+- ~~Miscalibration-robustness campaign (ADR-0005 rung 3; extends S4)~~
+  done (S4.5 protocol + docs/benchmarks/2026-08-05-rung3-robustness:
+  ranking holds in all six cells). Follow-ups surfaced by the campaign:
+  (a) capacity-error-robust baselines — the 15% margin cannot escape a
+  30% capacity error, so every rule policy collapsed to NOOP in cap-30;
+  an adaptive margin or violation-feedback term would harden B1-B4;
+  (b) lag >= step breaks hold-as-observed-count logic in every rule
+  policy (stale fleet-state observation becomes a revert request each
+  step) — baselines should hold by *plant* state, or the observation
+  should carry the post-transition count; owner call on which side to
+  fix, since it touches the S1.1 observation contract.
 - S9 local stack (`make local-stack`): parked per ADR-0005/C3
   (simulation-first; hardware waits for rung 4). Machine notes from the
   2026-08-04 viability probe: WSL2 box has Docker 29.x, 31 GB RAM, TUN

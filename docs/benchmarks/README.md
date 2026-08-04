@@ -139,6 +139,58 @@ Three findings:
    the same axis — the energy column exists so that trade is measured, not
    asserted.
 
+## 2026-08-05 — rung 3: the ranking survives miscalibration; the baselines do not
+
+The S4.5 robustness protocol's first campaign
+(`2026-08-05-rung3-robustness/`): frozen policies believing the nominal
+pool twin, dropped into six worlds — nominal, capacity ±30%, lag ×3,
+5% observation noise, and the worst-case combination — on the headline
+scenario, N=20, with the five locally retrained PPO checkpoints (see the
+reproduction bundle below).
+
+1. **Rung-3 verdict: the learner-over-{B1, B3, B4} ordering holds in all
+   six cells.** Decisively (no CI overlap anywhere) in `cap-30`, `lag-x3`,
+   and `worst`; with the familiar N=20 marginal overlaps in the
+   nominal-like cells. Against B2 the ordering holds in five cells and
+   flips on the mean under `cap-p30` (reactive 28.12 vs PPO 28.75-29.70,
+   CIs overlapping): over-provisioned worlds reward the pure reactor.
+2. **A −30% capacity error defeats every rule-based policy completely.**
+   In `cap-30`, threshold, reactive, forecast, and MPC all take **zero
+   actions** and price identically to NOOP (595.11): observed utilization
+   never crosses triggers calibrated to the believed capacity, and the
+   15% safety margin cannot escape a 30% error — the saturation trap
+   closes over the entire deployable suite. The learner degrades badly
+   (228 vs oracle 26.5) but keeps acting and stays 2.6× ahead of every
+   baseline. Ranking survives; absolute competence does not — this cell
+   is what "calibration matters" looks like in numbers.
+3. **Lag = one observation step breaks the rule policies' fleet-state
+   feedback loop.** In `lag-x3` (15-min lag = exactly one step), every
+   resize completes at the step boundary, so observations never show an
+   in-flight transition and the newest row still carries the
+   pre-transition count. "Hold the current count" becomes a revert
+   request; instrumented step traces show reactive/forecast/MPC
+   flip-flopping with a resize applied every step (672/672), spending
+   ~75% of the episode in violation (371.55 vs nominal 33.9-37.0). The
+   learner, whose policy does not echo the observed count back as its
+   target, is nearly untouched: 34.9 vs 32.3-33.1 nominal.
+4. **5% observation noise changes nothing material** — window-mean
+   averaging filters it (σ/√15 ≈ 1.3%) — except learner churn, which
+   noise can double (seed 2: 103 actions vs 48) at stable cost.
+
+## 2026-08-05 — cross-environment learner reproduction (ADR-0005/C4)
+
+The 2026-08-02 pool campaign's learner rows were produced in cloud
+sessions whose checkpoints were never committed. Retraining all five
+seeds from scratch on the local workstation (identical S5 protocol,
+`configs/sim-pool.yaml`, 500k steps; torch 2.13.0+cpu) and re-running the
+confirm60 protocol (`2026-08-05-local-ppo-confirm60/`) reproduces the
+claims: per-seed totals 32.98-34.27 vs recorded 33.01-34.20 (deltas
+−0.25 to +0.82, all within 95% CIs), 5/5 convergence, and the rung-2
+separation intact (worst local PPO upper 35.25 vs mpc lower 37.09).
+Training trajectories are not bit-portable across torch builds; the
+conclusions are. These five local checkpoints are the learner rows for
+the rung-3 campaign above.
+
 ## 2026-08-04 — B4 MPC baseline: the deployable ceiling measured, rung 2 cleared
 
 First bundles recorded on the local workstation (ADR-0005/C4: `run_meta.yaml`
